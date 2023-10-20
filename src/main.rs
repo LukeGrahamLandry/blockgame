@@ -55,7 +55,7 @@ impl App for State {
             }], include_str!("shader.wgsl")
         );
 
-        let mut chunk = Chunk::empty();
+        let mut chunk = Chunk::full(Tile(0));
 
         for i in 0..16 {
             for j in 0..16 {
@@ -76,6 +76,9 @@ impl App for State {
             }
         }
         chunks.update_mesh(ChunkPos::new(1, 1, 1), &chunk);
+
+        chunk = Chunk::full(Tile(1));
+        chunks.update_mesh(ChunkPos::new(0, 1, 2), &chunk);
 
         State {
             ctx,

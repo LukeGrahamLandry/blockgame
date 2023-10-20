@@ -10,6 +10,7 @@ pub struct Tile(pub u16);
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub struct LocalPos(usize);
 
+// TODO: needs to be signed
 /// The absolute position of a block in the world. Logically (ChunkPos * CHUNK_SIZE)+LocalPos.
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 pub struct BlockPos {
@@ -18,8 +19,9 @@ pub struct BlockPos {
     z: usize
 }
 
+// TODO: needs to be signed
 /// The position of a chunk in the world.
-#[derive(Copy, Clone, Eq, PartialEq, Default, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Default, Hash, Debug)]
 pub struct ChunkPos {
     pub x: usize,
     pub y: usize,
@@ -33,9 +35,9 @@ pub struct Chunk {
 impl Chunk {
     const LENGTH: usize = CHUNK_SIZE * CHUNK_SIZE * CHUNK_SIZE;
 
-    pub fn empty() -> Self {
+    pub fn full(tile: Tile) -> Self {
         Chunk {
-            tiles: Box::new([Tile(0); Self::LENGTH]),
+            tiles: Box::new([tile; Self::LENGTH]),
         }
     }
 

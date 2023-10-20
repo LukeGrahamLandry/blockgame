@@ -10,6 +10,20 @@ So 36 vertices in the buffer per cube. But most are duplicates and even faces of
 But it works! Have the shader colour by position (r = x%16/16, etc.) so I can tell what's going on. 
 Each vertex added offset based on the block's LocalPos. Each chunk transformed based on its ChunkPos.
 
+Demo chunk: full bottom layer plus 8 on next (264 cubes).
+
+- Naive: 9504 vertices, 9504 indices.
+- Reuse vertices within single cube: 2112 vertices, 9504 indices.
+- No index top/right/far if adjacent is full: 2112 vertices, 6390 indices.
+- ^ bottom/left/close (needs overflow check): 2112 vertices, 3564 indices.
+  - Can check that it's working by flying inside a solid part and seeing no internal faces. 
+  - Currently only pulls this trick within a chunk and assumes the edges are required. 
+- Only make vertex if needed: 2097 vertices, 3564 indices.
+  - Bad on this test with no inner solid bits because partial blocks omit faces but still need all the vertices for other faces
+  - For a solid chunk this goes from (32768 vertices, 9216 indices) to (5768 vertices, 9216 indices).
+
+The code for each face is a very ugly copy-paste that I don't really know how to make better at this point.
+
 ## Humble beginnings
 
 - https://sotrh.github.io/learn-wgpu/ (MIT License, Copyright (c) 2020 Benjamin Hansen)
