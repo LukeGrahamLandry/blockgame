@@ -2,21 +2,24 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use glam::{Mat4, Vec3, Vec4};
 use wgpu::{BindGroupLayout, RenderPass};
-use crate::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos};
+use crate::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos, Tile};
+use crate::textures::{TextureAtlas, Uv};
 use crate::window::{Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, WindowContext};
 
 pub struct ChunkList {
     chunks: HashMap<ChunkPos, Mesh>,
     layout: BindGroupLayout,
-    ctx: Rc<WindowContext>
+    ctx: Rc<WindowContext>,
+    atlas: Rc<TextureAtlas>
 }
 
 impl ChunkList {
-    pub fn new(ctx: Rc<WindowContext>, layout: BindGroupLayout) -> Self {
+    pub fn new(ctx: Rc<WindowContext>, atlas: Rc<TextureAtlas>, layout: BindGroupLayout) -> Self {
         ChunkList {
             chunks: Default::default(),
             layout,
             ctx,
+            atlas,
         }
     }
 
@@ -37,7 +40,11 @@ impl ChunkList {
     }
 
     fn build_mesh(&self, pos: ChunkPos, chunk: &Chunk) -> Mesh {
-        let mut mesh = MeshBuilder::default();  // TODO: reuse allocation
+        let mut mesh = MeshBuilder {  // TODO: reuse allocation
+            atlas: self.atlas.clone(),
+            vert: vec![],
+            indi: vec![],
+        };
 
         // TODO: could use wrapping and stay unsigned since negative becomes really high positive
         // TODO: you already know in the loop which are the edge so maybe treat those differently and the don't need the branching here.
@@ -57,13 +64,14 @@ impl ChunkList {
                 for z in 0..(CHUNK_SIZE as isize) {
                     if !empty(x, y, z) {
                         let pos = LocalPos::new(x as usize, y as usize, z as usize);
+                        let tile = chunk.get(pos);
                         let top = empty(x, y + 1, z);
                         let right = empty(x, y, z + 1);
                         let far = empty(x + 1, y, z);
                         let bottom = empty(x, y - 1, z);
                         let left = empty(x, y, z - 1);
                         let close = empty(x - 1, y, z);
-                        mesh.add_cube(pos.normalized() * Self::CHUNK_SCALE, top, bottom, left, right, close, far);
+                        mesh.add_cube(tile, pos.normalized() * Self::CHUNK_SCALE, top, bottom, left, right, close, far);
                         count += 1;
                     }
                 }
@@ -113,46 +121,48 @@ impl ChunkList {
     }
 }
 
-#[derive(Default)]
 struct MeshBuilder {
+    atlas: Rc<TextureAtlas>,
     vert: Vec<ModelVertex>,
     indi: Vec<i32>,
 }
 
 impl MeshBuilder {
-    fn add_cube(&mut self, pos: Vec3, top: bool, bottom: bool, left: bool, right: bool, close: bool, far: bool) {
+    fn add_cube(&mut self, tile: Tile, pos: Vec3, top: bool, bottom: bool, left: bool, right: bool, close: bool, far: bool) {
         let mut down_close_left = 0;
         let mut down_close_right = 0;
         let mut down_far_left = 0;
         let mut down_far_right = 0;
-        let mut up_close_left = 0;
         let mut up_close_right = 0;
         let mut up_far_left = 0;
         let mut up_far_right = 0;
 
+        let mut up_close_left = 0;
+        let uv = *self.atlas.get(tile, 0);
+
         if bottom || close || left {
-            down_close_left = self.vertex(pos, [0.0, 0.0, 0.0]);
+            down_close_left = self.vertex(uv.bottom_left(), pos, [0.0, 0.0, 0.0]);
         }
         if bottom || close || right {
-            down_close_right = self.vertex(pos, [0.0, 0.0, 1.0]);
+            down_close_right = self.vertex(uv.bottom_right(), pos, [0.0, 0.0, 1.0]);
         }
         if bottom || far || left {
-            down_far_left = self.vertex(pos, [1.0, 0.0, 0.0]);
+            down_far_left = self.vertex(uv.bottom_left(), pos, [1.0, 0.0, 0.0]);
         }
         if bottom || far || right {
-            down_far_right = self.vertex(pos, [1.0, 0.0, 1.0]);
+            down_far_right = self.vertex(uv.bottom_right(), pos, [1.0, 0.0, 1.0]);
         }
         if top || close || left {
-            up_close_left = self.vertex(pos, [0.0, 1.0, 0.0]);
+            up_close_left = self.vertex(uv.top_left(), pos, [0.0, 1.0, 0.0]);
         }
         if top || close || right {
-            up_close_right = self.vertex(pos, [0.0, 1.0, 1.0]);
+            up_close_right = self.vertex(uv.top_right(), pos, [0.0, 1.0, 1.0]);
         }
         if top || far || left {
-            up_far_left = self.vertex(pos, [1.0, 1.0, 0.0]);
+            up_far_left = self.vertex(uv.top_left(), pos, [1.0, 1.0, 0.0]);
         }
         if top || far || right {
-            up_far_right = self.vertex(pos, [1.0, 1.0, 1.0]);
+            up_far_right = self.vertex(uv.top_right(), pos, [1.0, 1.0, 1.0]);
         }
 
         if bottom {
@@ -180,9 +190,10 @@ impl MeshBuilder {
         }
     }
 
-    fn vertex(&mut self, pos: Vec3, a: impl Into<Vec3>) -> i32 {
+    fn vertex(&mut self, uv: [f32; 2], pos: Vec3, a: impl Into<Vec3>) -> i32 {
         self.vert.push(ModelVertex {
             position: Vec4::from(((a.into() + pos), 1.0)).to_array(),
+            uv,
         });
         (self.vert.len() - 1) as i32
     }

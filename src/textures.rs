@@ -1,13 +1,16 @@
 use std::env;
 use std::rc::Rc;
 use image::{DynamicImage, RgbaImage};
+use wgpu::{BindGroup, BindGroupLayout};
 use crate::pos::Tile;
 use crate::window::{Texture, WindowContext};
 
 pub struct TextureAtlas {
     uvs: Box<[Uv]>,
     uv_indexes: Box<[usize]>,
-    tex: Texture
+    tex: Texture,
+    pub bind_group: BindGroup,
+    pub layout: BindGroupLayout,
 }
 
 #[derive(Copy, Clone, Default)]
@@ -59,7 +62,7 @@ impl AtlasBuilder {
 
         if self.x + img_width > self.full_width {
             self.x = 0;
-            self.y += self.row_height;
+            self.y += self.row_height + 1;
             self.row_height = 0;
         }
 
@@ -81,24 +84,27 @@ impl AtlasBuilder {
             size: img_width as f32 / self.full_width as f32,
         };
 
-        self.x += img_width;
+        self.x += img_width + 1;
         uv
     }
 
     fn debug_save(&self, path: &str) {
+        self.as_image().save(path).unwrap();
+    }
+
+    fn as_image(&self) -> DynamicImage {
         let img = RgbaImage::from_vec(self.full_width as u32, self.full_height as u32, self.texture.clone()).unwrap();
-        let img = DynamicImage::from(img);
-        img.save(path).unwrap();
+        DynamicImage::from(img)
     }
 
     fn bake(self) -> Texture {
-        todo!()
+        Texture::from_image(&self.ctx.device, &self.ctx.queue, &self.as_image(), Some("atlas"))
     }
 }
 
 impl TextureAtlas {
     pub fn new(ctx: Rc<WindowContext>) -> Self {
-        let mut atlas = AtlasBuilder::new(ctx, 16 * 8, 16 * 8);
+        let mut atlas = AtlasBuilder::new(ctx.clone(), 16 * 8, 16 * 8);
         let stone_uv = atlas.load_file("stone.png");
         let grass_uv = atlas.load_file("grass.png");
         let dirt_uv = atlas.load_file("dirt.png");
@@ -109,16 +115,38 @@ impl TextureAtlas {
         blocks.extend([3, 2, 2, 2, 2, 2]);
         atlas.debug_save("target/atlas.png");
 
+        let tex = atlas.bake();
+        let layout = ctx.bind_group_layout_texture();
         TextureAtlas {
             uv_indexes: blocks.into_boxed_slice(),
             uvs: vec![Default::default(), stone_uv, dirt_uv, grass_uv].into_boxed_slice(),
-            tex: atlas.bake(),
+            bind_group: ctx.bind_group_texture(&layout, &tex),
+            tex,
+            layout
         }
     }
 
     pub fn get(&self, block: Tile, face: usize) -> &Uv {
         let index = (block.0 as usize * 6) + face;
-        &self.uvs[index]
+        &self.uvs[self.uv_indexes[index]]
+    }
+}
+
+impl Uv {
+    pub fn top_left(&self) -> [f32; 2] {
+        [self.x, self.y]
+    }
+
+    pub fn top_right(&self) -> [f32; 2] {
+        [self.x + self.size, self.y]
+    }
+
+    pub fn bottom_left(&self) -> [f32; 2] {
+        [self.x, self.y + self.size]
+    }
+
+    pub fn bottom_right(&self) -> [f32; 2] {
+        [self.x + self.size, self.y + self.size]
     }
 }
 

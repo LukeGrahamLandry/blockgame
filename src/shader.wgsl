@@ -15,11 +15,13 @@ var<uniform> meshInfo: MeshUniform;
 
 struct VertexInput {
     @location(0) world_position: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_position: vec4<f32>,
+    @location(1) uv: vec2<f32>,
 }
 
 @vertex
@@ -31,13 +33,18 @@ fn vs_main(
     var out: VertexOutput;
     out.clip_position = camera.view_proj * meshInfo.transform * model.world_position;
     out.world_position = meshInfo.transform * model.world_position;
+    out.uv = model.uv;
     return out;
 }
 
+// these corrispond to texture_bind_group_layout
+@group(2) @binding(0)
+var t_diffuse: texture_2d<f32>;
+@group(2) @binding(1)
+var s_diffuse: sampler;
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let r = 1.0 - f32(u32(in.world_position.x) % u32(16)) / 16.0;
-    let g = f32(u32(in.world_position.y) % u32(16)) / 16.0;
-    let b = f32(u32(in.world_position.z) % u32(16)) / 16.0;
-    return vec4(r, g, b, 1.0);
+    let object_colour = textureSample(t_diffuse, s_diffuse, in.uv);
+    return object_colour;
 }

@@ -3,6 +3,7 @@ use std::rc::Rc;
 use std::slice;
 use std::mem::size_of;
 use std::time::Instant;
+use image::{GenericImageView, ImageError};
 
 use wgpu::PresentMode;
 use winit::dpi::PhysicalSize;
@@ -332,19 +333,27 @@ impl WindowContext {
                     ty: BindingType::Sampler(SamplerBindingType::Filtering),   // as here
                     count: None,
                 },
-                BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: ShaderStages::FRAGMENT,
-                    ty: BindingType::Buffer {
-                        ty: BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }
+                // TODO: why was this here?
+                // BindGroupLayoutEntry {
+                //     binding: 2,
+                //     visibility: ShaderStages::FRAGMENT,
+                //     ty: BindingType::Buffer {
+                //         ty: BufferBindingType::Uniform,
+                //         has_dynamic_offset: false,
+                //         min_binding_size: None,
+                //     },
+                //     count: None,
+                // }
             ],
             label: Some("texture_bind_group_layout"),
         })
+    }
+
+    pub fn bind_group_texture(&self, layout: &BindGroupLayout, texture: &Texture) -> BindGroup {
+        self.bind_group("texture", layout, &[
+            wgpu::BindingResource::TextureView(&texture.view),
+            wgpu::BindingResource::Sampler(&texture.sampler)
+        ])
     }
 
     // This could go right in create_render_pipeline but maybe its good to let you reuse layouts.
@@ -471,6 +480,59 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+    pub(crate) fn from_image(device: &wgpu::Device, queue: &wgpu::Queue, img: &image::DynamicImage, label: Option<&str> ) -> Self {
+        let rgba = img.to_rgba8();
+        let dimensions = img.dimensions();
+
+        let size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+
+        let texture = device.create_texture(
+            &wgpu::TextureDescriptor {
+                label,
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            }
+        );
+
+        queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &rgba,
+            wgpu::ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * dimensions.0),
+                rows_per_image: Some(dimensions.1),
+            },
+            size,
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,  // Sharp pixels when up-scaling low resolution textures.
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        Self { texture, view, sampler }
+    }
+
     pub fn create_depth_texture(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration, label: &str) -> Self {
         let size = wgpu::Extent3d {
             width: config.width,
@@ -531,8 +593,9 @@ pub fn slice_to_bytes<T>(p: &[T]) -> &[u8] {
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ModelVertex {
     pub position: [f32; 4],  // 4th is ignored (not even used as w in shader!)
+    pub uv: [f32; 2]
 }
 
 impl ModelVertex {
-    pub const ATTRIBS: &'static [VertexAttribute] = &wgpu::vertex_attr_array![0 => Float32x4];
+    pub const ATTRIBS: &'static [VertexAttribute] = &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x2];
 }

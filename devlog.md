@@ -4,6 +4,8 @@ Made an atlas texture loader. Take a bunch of little textures png files and writ
 So a whole chunk can still be one draw call and each vertex has a different UV into that atlas. 
 Can save the atlas to a file to make sure that it looks right. 
 
+I can send the textures to the gpu just fine but alas my clever vertex reuse makes it a pain to texture the faces properly.
+
 ## Rendering a chunk
 
 Simple representation of a 16x16x16 chunk. Then just have a bunch of those and build a world. 

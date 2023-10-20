@@ -10,6 +10,8 @@ use std::rc::Rc;
 use glam::{Mat4, Vec2, Vec3};
 use wgpu::{BindGroup, BindGroupLayout, BindGroupLayoutEntry, Buffer, RenderPipeline};
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event::ElementState::Pressed;
+use winit::window::CursorGrabMode;
 use crate::camera::{CameraController, CameraHandle, SpectatorCameraController};
 use crate::chunk_mesh::ChunkList;
 use crate::pos::{Tile, Chunk, LocalPos, ChunkPos};
@@ -33,11 +35,13 @@ pub struct State {
     render_pipeline: RenderPipeline,
     chunks: ChunkList,
     controller: SpectatorCameraController,
+    atlas: Rc<TextureAtlas>,
+    cursor_lock: bool
 }
 
 impl App for State {
     fn new(ctx: Rc<WindowContext>) -> Self {
-        let atlas = TextureAtlas::new(ctx.clone());
+        let atlas = Rc::new(TextureAtlas::new(ctx.clone()));
         let depth_texture = Texture::create_depth_texture(&ctx.device, &ctx.config.borrow(), "depth_texture");
         let camera = CameraHandle::new(&ctx);
 
@@ -47,7 +51,8 @@ impl App for State {
 
         let render_pipeline_layout = ctx.pipeline_layout(&[
             &camera.camera_bind_group_layout,
-            &info_bind_group_layout
+            &info_bind_group_layout,
+            &atlas.layout
         ]);
 
         let render_pipeline = ctx.render_pipeline(
@@ -69,7 +74,7 @@ impl App for State {
             chunk.set(LocalPos::new(0, 1, i), Tile(1));
         }
 
-        let mut chunks = ChunkList::new(ctx.clone(), info_bind_group_layout);
+        let mut chunks = ChunkList::new(ctx.clone(), atlas.clone(), info_bind_group_layout);
         chunks.update_mesh(ChunkPos::new(0, 0, 0), &chunk);
         chunks.update_mesh(ChunkPos::new(0, 0, 1), &chunk);
         chunks.update_mesh(ChunkPos::new(0, 0, 2), &chunk);
@@ -90,6 +95,8 @@ impl App for State {
             render_pipeline,
             chunks,
             controller: SpectatorCameraController::new(30.0, 0.4),
+            atlas,
+            cursor_lock: true,
         }
     }
 
@@ -101,13 +108,26 @@ impl App for State {
                 input:
                 KeyboardInput {
                     virtual_keycode: Some(key),
+                    state,
                     ..
                 },
+
                 ..
             } => {
                 match key {
                     VirtualKeyCode::Key1 => self.controller.speed /= 2.0,
                     VirtualKeyCode::Key2 => self.controller.speed *= 2.0,
+                    VirtualKeyCode::Tab => if *state == Pressed {
+                        self.cursor_lock = !self.cursor_lock;
+                        if self.cursor_lock {
+                            self.ctx.window.set_cursor_grab(CursorGrabMode::Locked);
+                            self.ctx.window.set_cursor_visible(false);
+                        } else {
+                            self.ctx.window.set_cursor_grab(CursorGrabMode::None);
+                            self.ctx.window.set_cursor_visible(true);
+                        }
+                        self.controller.frozen = !self.controller.frozen;
+                    }
                     _ => {  }
                 }
             },
@@ -136,6 +156,7 @@ impl App for State {
             render_pass.set_pipeline(&self.render_pipeline);
 
             render_pass.set_bind_group(0, &self.camera.camera_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.atlas.bind_group, &[]);
             self.chunks.render(&mut render_pass);
 
         };
