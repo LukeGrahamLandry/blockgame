@@ -4,6 +4,12 @@ Simple representation of a 16x16x16 chunk. Then just have a bunch of those and b
 Any time chunk data changes, recalculate the mesh and send it to the gpu. 
 Got to the point of rendering a little triangle everywhere I want a block. 
 
+Start with most inefficient way of adding cubes to the mesh to make sure it works. 
+Think of the 8 corners of the unit cube, then add each face as two triangles.
+So 36 vertices in the buffer per cube. But most are duplicates and even faces of adjacent cubes are redundant.
+But it works! Have the shader colour by position (r = x%16/16, etc.) so I can tell what's going on. 
+Each vertex added offset based on the block's LocalPos. Each chunk transformed based on its ChunkPos.
+
 ## Humble beginnings
 
 - https://sotrh.github.io/learn-wgpu/ (MIT License, Copyright (c) 2020 Benjamin Hansen)

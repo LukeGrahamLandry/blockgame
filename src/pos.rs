@@ -1,3 +1,5 @@
+use glam::Vec3;
+
 pub const CHUNK_SIZE: usize = 16;
 
 /// The data of one block in a chunk.
@@ -19,9 +21,9 @@ pub struct BlockPos {
 /// The position of a chunk in the world.
 #[derive(Copy, Clone, Eq, PartialEq, Default, Hash)]
 pub struct ChunkPos {
-    x: usize,
-    y: usize,
-    z: usize
+    pub x: usize,
+    pub y: usize,
+    pub z: usize
 }
 
 pub struct Chunk {
@@ -51,6 +53,19 @@ impl LocalPos {
     //       Carefully do it the cache locality way based on this if I iterate over all blocks.
     pub fn new(x: usize, y: usize, z: usize) -> LocalPos {
         LocalPos((y * CHUNK_SIZE * CHUNK_SIZE) + (x * CHUNK_SIZE) + z)
+    }
+
+    // TODO: I like the idea of these fitting in a register but maybe its really dumb since now
+    //       I have to do a bunch of work to actually use them.
+    pub fn normalized(self) -> Vec3 {
+        let y = self.0 / CHUNK_SIZE / CHUNK_SIZE;
+        let x = (self.0 / CHUNK_SIZE) % CHUNK_SIZE;
+        let z = self.0 % CHUNK_SIZE;
+        Vec3::new(
+            x as f32 / CHUNK_SIZE as f32,
+            y as f32 / CHUNK_SIZE as f32,
+            z as f32 / CHUNK_SIZE as f32,
+        )
     }
 }
 

@@ -36,5 +36,8 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4(1.0, f32(u32(in.world_position.y / -30.0) % u32(5)) / 5.0, 0.0, 0.0);
+    let r = 1.0 - f32(u32(in.world_position.x) % u32(16)) / 16.0;
+    let g = f32(u32(in.world_position.y) % u32(16)) / 16.0;
+    let b = f32(u32(in.world_position.z) % u32(16)) / 16.0;
+    return vec4(r, g, b, 1.0);
 }

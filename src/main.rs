@@ -33,52 +33,6 @@ pub struct State {
     controller: SpectatorCameraController,
 }
 
-fn make_triangle(ctx: &WindowContext, transform: Mat4, info_bind_group_layout: &BindGroupLayout) -> Mesh {
-    let vert = vec![
-        ModelVertex {
-            position: [0.0, 0.5, 0.0, 1.0],
-        },
-        ModelVertex {
-            position: [-0.5, -0.5, 0.0, 1.0],
-        },
-        ModelVertex {
-            position: [0.5, -0.5, 0.0, 1.0],
-        },
-    ];
-
-    let indi = vec![0, 1, 2];
-
-    let vertex_buffer = ctx.buffer_init(
-        "tri", slice_to_bytes(&vert), wgpu::BufferUsages::VERTEX
-    );
-    let index_buffer = ctx.buffer_init(
-        "tri", slice_to_bytes(&indi), wgpu::BufferUsages::INDEX
-    );
-
-    let transform = MeshUniform {
-        transform: transform.to_cols_array_2d(),
-    };
-
-    let info_buffer = ctx.buffer_init(
-        "mesh_info", ref_to_bytes(&transform),
-        wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
-    );
-
-    let info_bind_group = ctx.bind_group("mesh_info", info_bind_group_layout, &[
-        info_buffer.as_entire_binding()
-    ]);
-
-    Mesh {
-        name: String::from("chunk"),
-        vertex_buffer,
-        index_buffer,
-        num_elements: indi.len() as u32,
-        transform,
-        info_buffer,
-        info_bind_group
-    }
-}
-
 impl App for State {
     fn new(ctx: Rc<WindowContext>) -> Self {
         let depth_texture = Texture::create_depth_texture(&ctx.device, &ctx.config.borrow(), "depth_texture");
@@ -114,6 +68,14 @@ impl App for State {
 
         let mut chunks = ChunkList::new(ctx.clone(), info_bind_group_layout);
         chunks.update_mesh(ChunkPos::new(0, 0, 0), &chunk);
+        chunks.update_mesh(ChunkPos::new(0, 0, 1), &chunk);
+        chunks.update_mesh(ChunkPos::new(0, 0, 2), &chunk);
+        for i in 0..16 {
+            for j in 0..16 {
+                chunk.set(LocalPos::new(j, 2, i), Tile(1));
+            }
+        }
+        chunks.update_mesh(ChunkPos::new(1, 1, 1), &chunk);
 
         State {
             ctx,
