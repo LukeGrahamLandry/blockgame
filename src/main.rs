@@ -1,5 +1,7 @@
 mod camera;
 mod window;
+mod chunk_mesh;
+mod pos;
 
 
 use std::mem::size_of;
@@ -8,6 +10,8 @@ use glam::{Mat4, Vec2, Vec3};
 use wgpu::{BindGroup, BindGroupLayout, BindGroupLayoutEntry, Buffer, RenderPipeline};
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 use crate::camera::{CameraController, CameraHandle, SpectatorCameraController};
+use crate::chunk_mesh::ChunkList;
+use crate::pos::{Tile, Chunk, LocalPos, ChunkPos};
 use crate::window::{App, Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, Texture, WindowContext};
 
 fn main() {
@@ -25,7 +29,7 @@ pub struct State {
     depth_texture: Texture,
     camera: CameraHandle,
     render_pipeline: RenderPipeline,
-    meshes: Vec<Mesh>,
+    chunks: ChunkList,
     controller: SpectatorCameraController,
 }
 
@@ -89,7 +93,6 @@ impl App for State {
             &info_bind_group_layout
         ]);
 
-
         let render_pipeline = ctx.render_pipeline(
             "main", &render_pipeline_layout, &[wgpu::VertexBufferLayout {
                 array_stride: size_of::<ModelVertex>() as wgpu::BufferAddress,
@@ -98,19 +101,27 @@ impl App for State {
             }], include_str!("shader.wgsl")
         );
 
-        let meshes = vec![
-            make_triangle(&ctx, Mat4::default(), &info_bind_group_layout),
-            make_triangle(&ctx, Mat4::from_translation(Vec3::new(10.0, -10.0, 0.0)), &info_bind_group_layout),
-            make_triangle(&ctx, Mat4::from_translation(Vec3::new(0.0, -10.0, 10.0)) * Mat4::from_scale(Vec3::new(3.0, 2.0, 3.0)), &info_bind_group_layout),
-        ];
+        let mut chunk = Chunk::empty();
+
+        for i in 0..16 {
+            for j in 0..16 {
+                chunk.set(LocalPos::new(j, 0, i), Tile(1));
+            }
+        }
+        for i in 0..8 {
+            chunk.set(LocalPos::new(0, 1, i), Tile(1));
+        }
+
+        let mut chunks = ChunkList::new(ctx.clone(), info_bind_group_layout);
+        chunks.update_mesh(ChunkPos::new(0, 0, 0), &chunk);
 
         State {
             ctx,
             depth_texture,
             camera,
             render_pipeline,
-            meshes,
-            controller: SpectatorCameraController::new(150.0, 0.4),
+            chunks,
+            controller: SpectatorCameraController::new(30.0, 0.4),
         }
     }
 
@@ -156,15 +167,9 @@ impl App for State {
             let mut render_pass = self.ctx.render_pass(&mut encoder, &view, &self.depth_texture.view);
             render_pass.set_pipeline(&self.render_pipeline);
 
-
             render_pass.set_bind_group(0, &self.camera.camera_bind_group, &[]);
+            self.chunks.render(&mut render_pass);
 
-            for mesh in &self.meshes {
-                render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-                render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-                render_pass.set_bind_group(1, &mesh.info_bind_group, &[]);
-                render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
-            }
         };
 
         self.ctx.queue.submit([

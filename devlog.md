@@ -1,3 +1,9 @@
+## Rendering a chunk
+
+Simple representation of a 16x16x16 chunk. Then just have a bunch of those and build a world. 
+Any time chunk data changes, recalculate the mesh and send it to the gpu. 
+Got to the point of rendering a little triangle everywhere I want a block. 
+
 ## Humble beginnings
 
 - https://sotrh.github.io/learn-wgpu/ (MIT License, Copyright (c) 2020 Benjamin Hansen)
