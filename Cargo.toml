@@ -9,6 +9,7 @@ winit="0.28.7"  # make a window
 wgpu="0.17.1"  # cross platform gpu stuff
 pollster="0.3.0"  # wgpu init functions are async but I don't need a whole runtime
 env_logger="0.10.0"  # access logs from wgpu
+image = "0.24.7"  # load png files
 
 [profile.dev.package."*"]
 opt-level = 3

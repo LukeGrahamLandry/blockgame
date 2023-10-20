@@ -1,3 +1,9 @@
+## Block textures
+
+Made an atlas texture loader. Take a bunch of little textures png files and write them into one big image as a grid. 
+So a whole chunk can still be one draw call and each vertex has a different UV into that atlas. 
+Can save the atlas to a file to make sure that it looks right. 
+
 ## Rendering a chunk
 
 Simple representation of a 16x16x16 chunk. Then just have a bunch of those and build a world. 

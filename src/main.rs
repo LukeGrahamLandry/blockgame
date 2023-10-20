@@ -2,6 +2,7 @@ mod camera;
 mod window;
 mod chunk_mesh;
 mod pos;
+mod textures;
 
 
 use std::mem::size_of;
@@ -12,6 +13,7 @@ use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, Win
 use crate::camera::{CameraController, CameraHandle, SpectatorCameraController};
 use crate::chunk_mesh::ChunkList;
 use crate::pos::{Tile, Chunk, LocalPos, ChunkPos};
+use crate::textures::TextureAtlas;
 use crate::window::{App, Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, Texture, WindowContext};
 
 fn main() {
@@ -35,6 +37,7 @@ pub struct State {
 
 impl App for State {
     fn new(ctx: Rc<WindowContext>) -> Self {
+        let atlas = TextureAtlas::new(ctx.clone());
         let depth_texture = Texture::create_depth_texture(&ctx.device, &ctx.config.borrow(), "depth_texture");
         let camera = CameraHandle::new(&ctx);
 
