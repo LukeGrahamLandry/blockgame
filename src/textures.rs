@@ -2,7 +2,7 @@ use std::env;
 use std::rc::Rc;
 use image::{DynamicImage, RgbaImage};
 use wgpu::{BindGroup, BindGroupLayout};
-use crate::pos::Tile;
+use crate::pos::{Direction, Tile};
 use crate::window::{Texture, WindowContext};
 
 pub struct TextureAtlas {
@@ -113,6 +113,7 @@ impl TextureAtlas {
         blocks.extend([1; 6]);
         blocks.extend([2; 6]);
         blocks.extend([3, 2, 2, 2, 2, 2]);
+        assert_eq!(blocks.len() % 6, 0);
         atlas.debug_save("target/atlas.png");
 
         let tex = atlas.bake();
@@ -126,8 +127,9 @@ impl TextureAtlas {
         }
     }
 
-    pub fn get(&self, block: Tile, face: usize) -> &Uv {
-        let index = (block.0 as usize * 6) + face;
+    pub fn get(&self, block: Tile, face: Direction) -> &Uv {
+        debug_assert!(block.solid());
+        let index = (block.index() * 6) + face as usize;
         &self.uvs[self.uv_indexes[index]]
     }
 }

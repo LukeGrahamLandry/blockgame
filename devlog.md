@@ -1,3 +1,5 @@
+## Different render modes
+
 ## Block textures
 
 Made an atlas texture loader. Take a bunch of little textures png files and write them into one big image as a grid. 
@@ -5,6 +7,12 @@ So a whole chunk can still be one draw call and each vertex has a different UV i
 Can save the atlas to a file to make sure that it looks right. 
 
 I can send the textures to the gpu just fine but alas my clever vertex reuse makes it a pain to texture the faces properly.
+So undo that. Still skip internal faces but each lone cube has 24 vertices (vertex only added if its face is needed).   
+Now demo chunk (2376 vertices, 3564 indices) and full chunk (6144 vertices, 9216 indices), not really that much of a hit.
+But also vertices are bigger now because they have a texture UV.
+
+They were super blurry but just needed to change my sampler to mag_filter: FilterMode::Nearest. 
+Far away blocks still wierd while I'm moving. Need to investigate mip-mapping? 
 
 ## Rendering a chunk
 
