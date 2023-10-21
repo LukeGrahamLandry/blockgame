@@ -6,7 +6,7 @@ use crate::pos::{Direction, Tile};
 use crate::window::{Texture, WindowContext};
 
 pub struct TextureAtlas {
-    uvs: Box<[Uv]>,
+    pub uvs: Box<[Uv]>,
     uv_indexes: Box<[usize]>,
     tex: Texture,
     pub bind_group: BindGroup,
@@ -108,11 +108,21 @@ impl TextureAtlas {
         let stone_uv = atlas.load_file("stone.png");
         let grass_uv = atlas.load_file("grass.png");
         let dirt_uv = atlas.load_file("dirt.png");
+        let leaf_uv = atlas.load_file("leaf.png");
+        let log_side = atlas.load_file("log_side.png");
+        let log_top = atlas.load_file("log_top.png");
+        let sapling = atlas.load_file("sapling.png");
+        let wheat = atlas.load_file("wheat.png");
         let mut blocks: Vec<usize> = vec![];
         blocks.extend([0; 6]);
         blocks.extend([1; 6]);
         blocks.extend([2; 6]);
         blocks.extend([3, 2, 2, 2, 2, 2]);
+        blocks.extend([4; 6]);
+        blocks.extend([6, 6, 5, 5, 5, 5]);
+        // TODO: remove solid plant blocks
+        blocks.extend([7; 6]);
+        blocks.extend([8; 6]);
         assert_eq!(blocks.len() % 6, 0);
         atlas.debug_save("target/atlas.png");
 
@@ -120,7 +130,7 @@ impl TextureAtlas {
         let layout = ctx.bind_group_layout_texture();
         TextureAtlas {
             uv_indexes: blocks.into_boxed_slice(),
-            uvs: vec![Default::default(), stone_uv, dirt_uv, grass_uv].into_boxed_slice(),
+            uvs: vec![Default::default(), stone_uv, dirt_uv, grass_uv, leaf_uv, log_side, log_top, sapling, wheat].into_boxed_slice(),
             bind_group: ctx.bind_group_texture(&layout, &tex),
             tex,
             layout

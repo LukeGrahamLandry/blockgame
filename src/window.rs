@@ -398,7 +398,8 @@ impl WindowContext {
                 entry_point: "fs_main",
                 targets: &[Some(ColorTargetState {
                     format: self.config.borrow().format,
-                    blend: Some(BlendState::REPLACE),
+                    // TODO: is this slower than REPLACE? Is it worth having two pipelines where one does things that I know don't have transparency and then you draw the rest on top?
+                    blend: Some(BlendState::ALPHA_BLENDING),
                     write_mask: ColorWrites::ALL,
                 })],
             }),

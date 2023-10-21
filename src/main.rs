@@ -63,7 +63,7 @@ impl App for State {
             }], include_str!("shader.wgsl")
         );
 
-        let mut chunk = Chunk::full(Tile::new(0, false));
+        let mut chunk = Chunk::full(Tile::EMPTY);
         let mut chunks = ChunkList::new(ctx.clone(), atlas.clone(), info_bind_group_layout);
 
         chunks.update_mesh(ChunkPos::new(0, 2, 0), &chunk);
@@ -89,6 +89,26 @@ impl App for State {
 
         chunk = Chunk::full(Tile::new(1, true));
         chunks.update_mesh(ChunkPos::new(0, 1, 2), &chunk);
+
+        chunk = Chunk::full(Tile::EMPTY);
+        for b in 1..8 {
+            for i in 0..16 {
+                for j in 0..(16-b) {
+                    chunk.set(LocalPos::new(j, b, i), Tile::new(b, true));
+                }
+            }
+        }
+        chunks.update_mesh(ChunkPos::new(0, 0, -1), &chunk);
+
+        chunk = Chunk::full(Tile::EMPTY);
+        for b in 1..3 {
+            for i in 0..16 {
+                for j in 0..(16-b) {
+                    chunk.set(LocalPos::new(j, b, i), Tile::new(b, false));
+                }
+            }
+        }
+        chunks.update_mesh(ChunkPos::new(-1, 0, -1), &chunk);
 
         State {
             ctx,

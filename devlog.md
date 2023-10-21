@@ -1,20 +1,39 @@
-## Different render modes
+## Polymorphic rendering (Oct 20)
 
-## Block textures
+Want to have things like grass and wheat that aren't solid blocks. 
+
+What I really want is a vtable on every tile, so I can have a custom render method, but I don't want to pay for 
+it all the time since I suspect most blocks will just be solid cubes (there's a lot of stone in the world).
+
+Instead, use the first bit in the id to say if its solid. If unset, use the rest as an index of UVs like before. 
+If set, use the rest as an index into a table of function pointers. Call that to do the actual rendering. 
+
+If I do more models, I should probably spend another bit on "just lookup a model to render" instead of writing a new function for each one.
+Have to remember that these functions aren't called every frame, they just build the mesh and can only use textures from 
+the atlas. So anything animated will need some other system. 
+
+Problem: transparency doesn't work, it's just black. Just needed to change render pipeline fragment to have `blend: Some(BlendState::ALPHA_BLENDING)`. 
+- https://stackoverflow.com/questions/72333404/wgpu-doesnt-render-with-alpha-channels
+
+## Block textures (Oct 20)
 
 Made an atlas texture loader. Take a bunch of little textures png files and write them into one big image as a grid. 
 So a whole chunk can still be one draw call and each vertex has a different UV into that atlas. 
 Can save the atlas to a file to make sure that it looks right. 
 
+Just using the tile id as an index into the list of uvs in the atlas texture.
 I can send the textures to the gpu just fine but alas my clever vertex reuse makes it a pain to texture the faces properly.
-So undo that. Still skip internal faces but each lone cube has 24 vertices (vertex only added if its face is needed).   
+So undo that. Still skip internal faces but each lone cube has 24 vertices (vertex only added if its face is needed). 
 Now demo chunk (2376 vertices, 3564 indices) and full chunk (6144 vertices, 9216 indices), not really that much of a hit.
 But also vertices are bigger now because they have a texture UV.
 
-They were super blurry but just needed to change my sampler to mag_filter: FilterMode::Nearest. 
+They were super blurry but just needed to change my sampler to `mag_filter: FilterMode::Nearest`. 
 Far away blocks still wierd while I'm moving. Need to investigate mip-mapping? 
 
-## Rendering a chunk
+If you fly inside a solid part you get z-fighting on the sides where its next to another solid chunk. 
+Because I don't bother culling those faces. But it's fine since normal play can't ever see them. 
+
+## Rendering a chunk (Oct 20)
 
 Simple representation of a 16x16x16 chunk. Then just have a bunch of those and build a world. 
 Any time chunk data changes, recalculate the mesh and send it to the gpu. 
@@ -40,18 +59,18 @@ Demo chunk: full bottom layer plus 8 on next (264 cubes).
 
 The code for each face is a very ugly copy-paste that I don't really know how to make better at this point.
 
-## Humble beginnings
+## Humble beginnings (Oct 19)
 
 - https://sotrh.github.io/learn-wgpu/ (MIT License, Copyright (c) 2020 Benjamin Hansen)
 
 Ripped the guts out of another of my projects experimenting with webgpu (based on learn-wgpu).
 Got a nice start with the boilerplate, so I can render triangles and move around my camera.
 
-## Inspiration 
+## Inspiration (Oct 19)
 
 - https://github.com/superjer/tinyc.games/tree/main/blocko-game (MIT License, Copyright (c) 2016 Jer Wilson)
 
-I want to make a voxel game like minecraft. Inspired by how small/understandable blocko-game is (~4000 lines!). 
+I want to make a voxel game like minecraft. Inspired by how small blocko-game is (~4000 lines!). 
 Only took 800 years to figure out how to build it, I assume, because apple has gone on an anti-opengl 
 crusade sometime in the last 8 years. 
 

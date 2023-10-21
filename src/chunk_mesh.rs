@@ -10,8 +10,12 @@ pub struct ChunkList {
     chunks: HashMap<ChunkPos, Mesh>,
     layout: BindGroupLayout,
     ctx: Rc<WindowContext>,
-    atlas: Rc<TextureAtlas>,
-    builder: MeshBuilder
+    builder: MeshBuilder,
+
+    // Old meshes not currently in use. When loading a new chunk, check if there's one here,
+    // since I assume it's cheaper to update a buffer than create a new one.
+    // TODO: make sure to check that there's enough space in the buffer before writing. Resizing will amortize.
+    mesh_pool: Vec<Mesh>
 }
 
 impl ChunkList {
@@ -21,11 +25,11 @@ impl ChunkList {
             layout,
             ctx,
             builder: MeshBuilder {
-                atlas: atlas.clone(),
-                vert: vec![],
-                indi: vec![],
+                atlas,
+                vert: Vec::with_capacity(10000),
+                indi: Vec::with_capacity(10000),
             },
-            atlas,
+            mesh_pool: Vec::with_capacity(Self::MAX_ALLOC_POOL),
         }
     }
 
@@ -40,10 +44,15 @@ impl ChunkList {
     }
 
     const CHUNK_SCALE: f32 = CHUNK_SIZE as f32;
+    const MAX_ALLOC_POOL: usize = 20;
 
     pub fn update_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) {
         if chunk.is_empty() {
-            self.chunks.remove(&pos);
+            if let Some(old) = self.chunks.remove(&pos) {
+                if self.mesh_pool.len() < Self::MAX_ALLOC_POOL {
+                    self.mesh_pool.push(old);
+                }
+            }
         } else {
             let mesh = self.build_mesh(pos, chunk);
             self.chunks.insert(pos, mesh);
@@ -80,6 +89,9 @@ impl ChunkList {
                         let close = empty(x - 1, y, z);
                         self.builder.add_cube(tile, pos.normalized() * Self::CHUNK_SCALE, top, bottom, left, right, close, far);
                         count += 1;
+                    } else if tile.custom_render() {
+                        let func = renderers::RENDER_FUNCS[tile.index()];
+                        func(&mut self.builder, pos.normalized() * Self::CHUNK_SCALE);
                     }
                 }
             }
@@ -128,7 +140,7 @@ impl ChunkList {
     }
 }
 
-struct MeshBuilder {
+pub struct MeshBuilder {
     atlas: Rc<TextureAtlas>,
     vert: Vec<ModelVertex>,
     indi: Vec<i32>,
@@ -149,7 +161,6 @@ impl MeshBuilder {
         let up_close_right = [0.0, 1.0, 1.0];
         let up_far_left = [1.0, 1.0, 0.0];
         let up_far_right = [1.0, 1.0, 1.0];
-
 
         if bottom {
             let uv = *self.atlas.get(tile, Direction::Down);
@@ -204,5 +215,38 @@ impl MeshBuilder {
         self.indi.push(a);
         self.indi.push(b);
         self.indi.push(c);
+    }
+}
+
+mod renderers {
+    use glam::Vec3;
+    use crate::chunk_mesh::{MeshBuilder};
+
+    pub type CustomRenderFn = &'static dyn Fn(&mut MeshBuilder, Vec3);
+    pub const RENDER_FUNCS: [CustomRenderFn; 3] = [&air, &wheat, &sapling];
+
+    fn air(_: &mut MeshBuilder, _: Vec3) {
+        unreachable!()
+    }
+
+    fn sapling(mesh: &mut MeshBuilder, pos: Vec3) {
+        let uv = mesh.atlas.uvs[7];
+        // These have x/z swapped so it makes a little cross.
+        mesh.add_quad(&uv, pos, [0.0, 1.0, 0.5], [1.0, 1.0, 0.5], [0.0, 0.0, 0.5], [1.0, 0.0, 0.5]);
+        mesh.add_quad(&uv, pos, [0.5, 1.0, 0.0], [0.5, 1.0, 1.0], [0.5, 0.0, 0.0], [0.5, 0.0, 1.0]);
+    }
+
+    fn wheat(mesh: &mut MeshBuilder, pos: Vec3) {
+        let uv = mesh.atlas.uvs[8];
+        // This time two quads going across.
+        let a = [0.2, 0.8];
+        for a in a {
+            mesh.add_quad(&uv, pos, [0.0, 1.0, a], [1.0, 1.0, a], [0.0, 0.0, a], [1.0, 0.0, a]);
+        }
+        // Then swap x/z so its like a tick-tac-toe board.
+        for a in a {
+            mesh.add_quad(&uv, pos, [a, 1.0, 0.0], [a, 1.0, 1.0], [a, 0.0, 0.0], [a, 0.0, 1.0]);
+        }
+
     }
 }

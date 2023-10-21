@@ -3,23 +3,23 @@ use glam::Vec3;
 pub const CHUNK_SIZE: usize = 16;
 
 /// The data of one block in a chunk.
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Default, Debug)]
 pub struct Tile(u16);
 
 /// The position of a block within a chunk. Default is the empty block.
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Default, Debug)]
 pub struct LocalPos(usize);
 
-// TODO: needs to be signed
+// TODO: needs to be float?
 /// The absolute position of a block in the world. Logically (ChunkPos * CHUNK_SIZE)+LocalPos.
-#[derive(Copy, Clone, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Default, Debug)]
 pub struct BlockPos {
     x: isize,
     y: isize,
     z: isize
 }
 
-// TODO: needs to be signed
+// TODO: needs to be float?
 /// The position of a chunk in the world.
 #[derive(Copy, Clone, Eq, PartialEq, Default, Hash, Debug)]
 pub struct ChunkPos {
@@ -115,8 +115,9 @@ impl BlockPos {
 
 impl Tile {
     const SOLID: u16 = 1 << 15;
+    pub const EMPTY: Tile = Self::new(0, false);
 
-    pub fn new(index: usize, is_solid: bool) -> Self {
+    pub const fn new(index: usize, is_solid: bool) -> Self {
         if is_solid {
             Tile(index as u16 | Self::SOLID)
         } else {
@@ -134,6 +135,10 @@ impl Tile {
 
     pub fn index(self) -> usize {
         (self.0 & !Self::SOLID) as usize
+    }
+
+    pub fn custom_render(&self) -> bool {
+       !self.solid() && !self.empty()
     }
 }
 
@@ -181,4 +186,12 @@ impl DirSet {
     pub fn contains(&mut self, dir: Direction) -> bool{
         self.0 & (1 << dir as usize) != 0
     }
+}
+
+
+#[test]
+fn tile_repr(){
+    assert_eq!(Tile(0), Tile::EMPTY);
+    assert_eq!(Tile::default(), Tile::EMPTY);
+    assert!(Tile::EMPTY.empty());
 }

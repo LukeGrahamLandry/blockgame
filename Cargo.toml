@@ -12,8 +12,13 @@ env_logger="0.10.0"  # access logs from wgpu
 image = "0.24.7" # load png files
 
 [profile.dev.package."*"]
-opt-level = 3
+opt-level = 2
 codegen-units = 1
 
 [profile.release]
 strip = "debuginfo"
+#panic = "abort"
+#lto = true
+
+[profile.release.package."*"]
+codegen-units = 1
