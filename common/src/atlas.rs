@@ -1,27 +1,20 @@
 use std::env;
-use std::rc::Rc;
 use image::{DynamicImage, RgbaImage};
-use wgpu::{BindGroup, BindGroupLayout};
 use crate::pos::{Direction, Tile};
-use crate::window::{Texture, WindowContext};
 
-pub struct TextureAtlas {
-    pub uvs: Box<[Uv]>,
-    uv_indexes: Box<[usize]>,
-    tex: Texture,
-    pub bind_group: BindGroup,
-    pub layout: BindGroupLayout,
-}
-
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Uv {
-    x: f32,
-    y: f32,
-    size: f32
+    pub x: f32,
+    pub y: f32,
+    pub size: f32
 }
 
-struct AtlasBuilder {
-    ctx: Rc<WindowContext>,
+
+pub struct AtlasData {
+    pub uv_indexes: Box<[usize]>,
+}
+
+pub struct AtlasBuilder {
     texture: Vec<u8>,
     full_width: usize,
     full_height: usize,
@@ -32,9 +25,8 @@ struct AtlasBuilder {
 }
 
 impl AtlasBuilder {
-    fn new(ctx: Rc<WindowContext>, width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize) -> Self {
         AtlasBuilder {
-            ctx,
             texture: vec![0; 4 * width * height],
             full_width: width,
             full_height: height,
@@ -44,7 +36,7 @@ impl AtlasBuilder {
         }
     }
 
-    fn load_file(&mut self, name: &str) -> Uv {
+    pub fn load_file(&mut self, name: &str) -> Uv {
         let bytes = load_binary(name, "assets");  // TODO: reuse allocation
         let img = image::load_from_memory(&bytes).expect("Failed to decode image.");
         self.load(&img)
@@ -88,59 +80,14 @@ impl AtlasBuilder {
         uv
     }
 
-    fn debug_save(&self, path: &str) {
+    pub fn save(&self, path: &str) {
         self.as_image().save(path).unwrap();
     }
 
-    fn as_image(&self) -> DynamicImage {
+    // TODO: this clones it which is sad but only done at the beginning so it's fine.
+    pub fn as_image(&self) -> DynamicImage {
         let img = RgbaImage::from_vec(self.full_width as u32, self.full_height as u32, self.texture.clone()).unwrap();
         DynamicImage::from(img)
-    }
-
-    fn bake(self) -> Texture {
-        Texture::from_image(&self.ctx.device, &self.ctx.queue, &self.as_image(), Some("atlas"))
-    }
-}
-
-impl TextureAtlas {
-    pub fn new(ctx: Rc<WindowContext>) -> Self {
-        let mut atlas = AtlasBuilder::new(ctx.clone(), 16 * 8, 16 * 8);
-        let stone_uv = atlas.load_file("stone.png");
-        let grass_uv = atlas.load_file("grass.png");
-        let dirt_uv = atlas.load_file("dirt.png");
-        let leaf_uv = atlas.load_file("leaf.png");
-        let log_side = atlas.load_file("log_side.png");
-        let log_top = atlas.load_file("log_top.png");
-        let sapling = atlas.load_file("sapling.png");
-        let wheat = atlas.load_file("wheat.png");
-        let mut blocks: Vec<usize> = vec![];
-        blocks.extend([0; 6]);
-        blocks.extend([1; 6]);
-        blocks.extend([2; 6]);
-        blocks.extend([3, 2, 2, 2, 2, 2]);
-        blocks.extend([4; 6]);
-        blocks.extend([6, 6, 5, 5, 5, 5]);
-        // TODO: remove solid plant blocks
-        blocks.extend([7; 6]);
-        blocks.extend([8; 6]);
-        assert_eq!(blocks.len() % 6, 0);
-        atlas.debug_save("target/atlas.png");
-
-        let tex = atlas.bake();
-        let layout = ctx.bind_group_layout_texture();
-        TextureAtlas {
-            uv_indexes: blocks.into_boxed_slice(),
-            uvs: vec![Default::default(), stone_uv, dirt_uv, grass_uv, leaf_uv, log_side, log_top, sapling, wheat].into_boxed_slice(),
-            bind_group: ctx.bind_group_texture(&layout, &tex),
-            tex,
-            layout
-        }
-    }
-
-    pub fn get(&self, block: Tile, face: Direction) -> &Uv {
-        debug_assert!(block.solid());
-        let index = (block.index() * 6) + face as usize;
-        &self.uvs[self.uv_indexes[index]]
     }
 }
 

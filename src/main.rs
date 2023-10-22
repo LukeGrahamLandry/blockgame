@@ -1,31 +1,24 @@
 mod camera;
 mod window;
 mod chunk_mesh;
-mod pos;
-mod textures;
-
+mod gen;
 
 use std::mem::size_of;
 use std::rc::Rc;
-use glam::{Mat4, Vec2, Vec3};
-use wgpu::{BindGroup, BindGroupLayout, BindGroupLayoutEntry, Buffer, RenderPipeline};
-use winit::event::{DeviceEvent, ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
+use wgpu::RenderPipeline;
+use winit::event::{DeviceEvent, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event::ElementState::Pressed;
 use winit::window::CursorGrabMode;
 use crate::camera::{CameraController, CameraHandle, SpectatorCameraController};
-use crate::chunk_mesh::ChunkList;
-use crate::pos::{Tile, Chunk, LocalPos, ChunkPos};
-use crate::textures::TextureAtlas;
-use crate::window::{App, Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, Texture, WindowContext};
+use crate::chunk_mesh::{ChunkList, TextureAtlas};
+use common::pos::{Chunk, ChunkPos, LocalPos, Tile};
+use crate::window::{App, ModelVertex, Texture, WindowContext};
+use common;
 
 fn main() {
+    println!("Data: {}", concat!(env!("OUT_DIR"), "/gen.rs"));
     env_logger::init();
     pollster::block_on(WindowContext::run(State::new));
-}
-
-enum ControlMode {
-    Fly,
-    Walk
 }
 
 pub struct State {
@@ -41,7 +34,7 @@ pub struct State {
 
 impl App for State {
     fn new(ctx: Rc<WindowContext>) -> Self {
-        let atlas = Rc::new(TextureAtlas::new(ctx.clone()));
+        let atlas = Rc::new(TextureAtlas::new(&ctx));
         let depth_texture = Texture::create_depth_texture(&ctx.device, &ctx.config.borrow(), "depth_texture");
         let camera = CameraHandle::new(&ctx);
 
@@ -63,52 +56,9 @@ impl App for State {
             }], include_str!("shader.wgsl")
         );
 
-        let mut chunk = Chunk::full(Tile::EMPTY);
         let mut chunks = ChunkList::new(ctx.clone(), atlas.clone(), info_bind_group_layout);
 
-        chunks.update_mesh(ChunkPos::new(0, 2, 0), &chunk);
-
-        for i in 0..16 {
-            for j in 0..16 {
-                chunk.set(LocalPos::new(j, 0, i), Tile::new(1, true));
-            }
-        }
-        for i in 0..8 {
-            chunk.set(LocalPos::new(0, 1, i), Tile::new(2, true));
-        }
-
-        chunks.update_mesh(ChunkPos::new(0, 0, 0), &chunk);
-        chunks.update_mesh(ChunkPos::new(0, 0, 1), &chunk);
-        chunks.update_mesh(ChunkPos::new(0, 0, 2), &chunk);
-        for i in 0..16 {
-            for j in 0..16 {
-                chunk.set(LocalPos::new(j, 2, i), Tile::new(3, true));
-            }
-        }
-        chunks.update_mesh(ChunkPos::new(1, 1, 1), &chunk);
-
-        chunk = Chunk::full(Tile::new(1, true));
-        chunks.update_mesh(ChunkPos::new(0, 1, 2), &chunk);
-
-        chunk = Chunk::full(Tile::EMPTY);
-        for b in 1..8 {
-            for i in 0..16 {
-                for j in 0..(16-b) {
-                    chunk.set(LocalPos::new(j, b, i), Tile::new(b, true));
-                }
-            }
-        }
-        chunks.update_mesh(ChunkPos::new(0, 0, -1), &chunk);
-
-        chunk = Chunk::full(Tile::EMPTY);
-        for b in 1..3 {
-            for i in 0..16 {
-                for j in 0..(16-b) {
-                    chunk.set(LocalPos::new(j, b, i), Tile::new(b, false));
-                }
-            }
-        }
-        chunks.update_mesh(ChunkPos::new(-1, 0, -1), &chunk);
+        init_world(&mut chunks);
 
         State {
             ctx,
@@ -198,4 +148,58 @@ impl App for State {
             self.camera.camera.resize(new_size.width, new_size.height);
         }
     }
+}
+
+// Just fill it with a bunch of random stuff for debugging.
+fn init_world(chunks: &mut ChunkList) {
+    let mut chunk = Chunk::full(Tile::EMPTY);
+    chunks.update_mesh(ChunkPos::new(0, 2, 0), &chunk);
+
+    for i in 0..16 {
+        for j in 0..16 {
+            chunk.set(LocalPos::new(j, 0, i), gen::tiles::stone);
+        }
+    }
+    for i in 0..8 {
+        chunk.set(LocalPos::new(0, 1, i), gen::tiles::dirt);
+    }
+
+    chunks.update_mesh(ChunkPos::new(0, 0, 0), &chunk);
+    chunks.update_mesh(ChunkPos::new(0, 0, 1), &chunk);
+    chunks.update_mesh(ChunkPos::new(0, 0, 2), &chunk);
+    for i in 0..16 {
+        for j in 0..16 {
+            chunk.set(LocalPos::new(j, 2, i), gen::tiles::grass);
+        }
+    }
+    chunks.update_mesh(ChunkPos::new(1, 1, 1), &chunk);
+
+    chunk = Chunk::full(gen::tiles::stone);
+    chunks.update_mesh(ChunkPos::new(0, 1, 2), &chunk);
+
+    chunk = Chunk::full(Tile::EMPTY);
+    let solids = [
+        gen::tiles::stone, gen::tiles::dirt,gen::tiles::grass,gen::tiles::log,gen::tiles::leaf,gen::tiles::wheat_solid, gen::tiles::sapling_solid
+    ];
+    for (b, tile) in solids.iter().enumerate() {
+        for i in 0..16 {
+            for j in 0..(16-b) {
+                chunk.set(LocalPos::new(j, b, i), *tile);
+            }
+        }
+    }
+    chunks.update_mesh(ChunkPos::new(0, 0, -1), &chunk);
+
+    chunk = Chunk::full(Tile::EMPTY);
+    let custom = [
+        gen::tiles::sapling, gen::tiles::wheat,
+    ];
+    for (b, tile) in custom.iter().enumerate() {
+        for i in 0..16 {
+            for j in 0..(16-b) {
+                chunk.set(LocalPos::new(j, b, i), *tile);
+            }
+        }
+    }
+    chunks.update_mesh(ChunkPos::new(-1, 0, -1), &chunk);
 }

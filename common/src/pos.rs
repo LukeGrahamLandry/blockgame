@@ -158,7 +158,7 @@ pub struct DirSet(u8);
 
 impl Direction {
     pub fn offset(self) -> BlockPos {
-        const offsets: [BlockPos; 6] = [
+        const OFFSETS: [BlockPos; 6] = [
             BlockPos::new(0, 1, 0),
             BlockPos::new(0, -1, 0),
             BlockPos::new(1, 0, 0),
@@ -166,7 +166,7 @@ impl Direction {
             BlockPos::new(0, 0, 1),
             BlockPos::new(0, 0, -1),
         ];
-        offsets[self as usize]
+        OFFSETS[self as usize]
     }
 }
 

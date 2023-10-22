@@ -140,7 +140,7 @@ impl CameraPerspective {
     pub fn calc_matrix(&self) -> Mat4 {
         let player = Mat4::look_at_rh(
             self.pos,
-            (self.pos + self.facing()),
+            self.pos + self.facing(),
             Vec3::new(0.0, 1.0, 0.0),
         );
 

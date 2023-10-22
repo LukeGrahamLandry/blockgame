@@ -1,3 +1,39 @@
+## Code generation for fun and profit (Oct 21)
+
+My code for defining blocks is starting to feel a bit insane. Need to change things in many places to add a new block. 
+
+First thought was I'll just write declarative functions for making blocks. 
+They'd both load the textures into an atlas for runtime and generate a file with constants of all the block ids and uvs. 
+Then you compile again, and now you have that file, so other code can reference those constants and since its deterministic,
+it will line up with the runtime information from calling those functions this time. 
+
+- You can't just `include!("target/gen.rs")`, that path is relative to the src directory.
+- When using bindgen, they suggest `include!(concat!(env!("OUT_DIR"), "/gen.rs"));` but `error: environment variable `OUT_DIR` not defined at compile time`. 
+- You need to have a buildscript if you want OUT_DIR to exist. 
+- It prints zero as "0" but you can't assign a float field to that, need to print "0f32".
+- RustRover can't cope with this at all. It can't find the generated file, so it highlights as errors even though it compiles. 
+I'm hoping that's because I'm using and old OUT_DIR and the hash changed so would be fixed by using a build script properly.
+- There's also a chicken and egg problem. If you can't compile without the generated file, then you can never generate the file the first time. 
+
+So maybe that's just a bad idea. Maybe split into two crates and have a buildscript that depends on the first to generate code for the second. 
+
+- RustRover can't find the common crate from build script even though it compiles. 
+- RustRover still can't find the generated file in OUT_DIR.
+
+But fixed both by deleting the `.idea` folder and restarting, so it re-indexed. Maybe that would have worked before.
+Seems like I don't have to redo that when the file changes. Maybe only when adding new ones?
+
+Now adding blocks is easy. 
+- Solid: load the texture to the atlas, add its indexes to the list. Choose the right indexes for each shape: cube, grass, or pillar. 
+- Custom: add the rendering function with the same name to the list.
+
+During that process, save the full atlas texture and include those bytes in the final binary as well, 
+so don't need to carefully find the assets folder at runtime anymore. 
+
+No need to manually keep track of indexes. Tiles and uvs just live in constants with nice names. 
+I can even generate tests that lookup the render function of each tile and check that the pointer matches the function with the same name. 
+Just a nice little sanity check thing.
+
 ## Polymorphic rendering (Oct 20)
 
 Want to have things like grass and wheat that aren't solid blocks. 

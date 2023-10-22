@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use glam::{Mat4, Vec3, Vec4};
-use wgpu::{BindGroupLayout, RenderPass};
-use crate::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos, Tile, Direction};
-use crate::textures::{TextureAtlas, Uv};
-use crate::window::{Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, WindowContext};
+use wgpu::{BindGroup, BindGroupLayout, RenderPass};
+use common::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos, Tile, Direction};
+use common::atlas::{AtlasData, Uv};
+use crate::gen;
+use crate::window::{Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, Texture, WindowContext};
 
 pub struct ChunkList {
     chunks: HashMap<ChunkPos, Mesh>,
@@ -90,7 +91,7 @@ impl ChunkList {
                         self.builder.add_cube(tile, pos.normalized() * Self::CHUNK_SCALE, top, bottom, left, right, close, far);
                         count += 1;
                     } else if tile.custom_render() {
-                        let func = renderers::RENDER_FUNCS[tile.index()];
+                        let func = gen::render::FUNCS[tile.index()];
                         func(&mut self.builder, pos.normalized() * Self::CHUNK_SCALE);
                     }
                 }
@@ -218,26 +219,58 @@ impl MeshBuilder {
     }
 }
 
-mod renderers {
+pub struct TextureAtlas {
+    pub data: AtlasData,
+    tex: Texture,
+    pub bind_group: BindGroup,
+    pub layout: BindGroupLayout,
+}
+
+impl TextureAtlas {
+    pub fn new(ctx: &WindowContext) -> Self {
+        let tex = Self::bake(ctx);
+        let layout = ctx.bind_group_layout_texture();
+        TextureAtlas {
+            data: gen::get_atlas_data(),
+            bind_group: ctx.bind_group_texture(&layout, &tex),
+            tex,
+            layout
+        }
+    }
+
+    fn bake(ctx: &WindowContext) -> Texture {
+        let img = image::load_from_memory(gen::ATLAS_PNG).unwrap();
+        Texture::from_image(&ctx.device, &ctx.queue, &img, Some("atlas"))
+    }
+
+    pub fn get(&self, block: Tile, face: Direction) -> &Uv {
+        debug_assert!(block.solid());
+        let index = (block.index() * 6) + face as usize;
+        gen::uvs::ALL[self.data.uv_indexes[index]]
+    }
+}
+
+
+pub mod renderers {
     use glam::Vec3;
     use crate::chunk_mesh::{MeshBuilder};
+    use crate::gen::uvs;
 
     pub type CustomRenderFn = &'static dyn Fn(&mut MeshBuilder, Vec3);
-    pub const RENDER_FUNCS: [CustomRenderFn; 3] = [&air, &wheat, &sapling];
 
-    fn air(_: &mut MeshBuilder, _: Vec3) {
+    pub fn air(_: &mut MeshBuilder, _: Vec3) {
         unreachable!()
     }
 
-    fn sapling(mesh: &mut MeshBuilder, pos: Vec3) {
-        let uv = mesh.atlas.uvs[7];
+    pub fn sapling(mesh: &mut MeshBuilder, pos: Vec3) {
+        let uv = uvs::sapling;
         // These have x/z swapped so it makes a little cross.
         mesh.add_quad(&uv, pos, [0.0, 1.0, 0.5], [1.0, 1.0, 0.5], [0.0, 0.0, 0.5], [1.0, 0.0, 0.5]);
         mesh.add_quad(&uv, pos, [0.5, 1.0, 0.0], [0.5, 1.0, 1.0], [0.5, 0.0, 0.0], [0.5, 0.0, 1.0]);
     }
 
-    fn wheat(mesh: &mut MeshBuilder, pos: Vec3) {
-        let uv = mesh.atlas.uvs[8];
+    pub fn wheat(mesh: &mut MeshBuilder, pos: Vec3) {
+        let uv = uvs::wheat;
         // This time two quads going across.
         let a = [0.2, 0.8];
         for a in a {
