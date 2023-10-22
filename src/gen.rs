@@ -1,4 +1,5 @@
 #![allow(non_upper_case_globals)]
+#![allow(unused)]
 
 use crate::chunk_mesh::renderers::CustomRenderFn;
 include!(concat!(env!("OUT_DIR"), "/gen.rs"));
@@ -9,16 +10,16 @@ pub const ATLAS_PNG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/atlas.png
 
 #[test]
 fn codegen_sanity_check(){
-    let atlas = get_atlas_data();
+    let uv_indexes = &uvs::SOLID_INDEXES;
 
     // No out of bounds indexes.
-    assert_eq!(atlas.uv_indexes.len() % 6, 0);
-    for i in atlas.uv_indexes.iter() {
-        assert!(*i < uvs::ALL.len());
+    assert_eq!(uv_indexes.len() % 6, 0);
+    for i in uv_indexes.iter() {
+        assert!((*i as usize) < uvs::ALL.len());
     }
 
     // All solid tiles have a span of indexes.
-    let solid_count = atlas.uv_indexes.len() / 6 - 1;  // -1 for placeholder empty.
+    let solid_count = uv_indexes.len() / 6 - 1;  // -1 for placeholder empty.
     assert_eq!(tiles::SOLID_COUNT, solid_count);
 
     assert_eq!(tiles::CUSTOM_COUNT, render::FUNCS.len() - 1);
@@ -27,13 +28,16 @@ fn codegen_sanity_check(){
     for uv in uvs::ALL {
         assert!(
             uv.x >= 0.0 && uv.x <= 1.0 &&
-            uv.y >= 0.0 && uv.y <= 1.0 &&
-            uv.size >= 0.0 && uv.size <= 1.0 &&
-            (uv.x + uv.size) <= 1.0 && (uv.y + uv.size) <= 1.0
+                uv.y >= 0.0 && uv.y <= 1.0 &&
+                uv.size >= 0.0 && uv.size <= 1.0 &&
+                (uv.x + uv.size) <= 1.0 && (uv.y + uv.size) <= 1.0
         );
     }
+
+    assert!(uvs::ALL.len() < 256, "SOLID_INDEXES assumes indexes can be u8.");
 }
 
+#[cfg(test)]
 fn fn_eq(a: CustomRenderFn, b: CustomRenderFn) -> bool {
     // Safety: Any bit pattern is a valid (usize, usize). The restrictions go the other way.
     let a = unsafe { std::mem::transmute::<_, (usize, usize)>(a) };

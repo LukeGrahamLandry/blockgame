@@ -1,3 +1,22 @@
+## Look at me; I am the JS now (Oct 21)
+
+- https://gfx-rs.github.io/2020/04/21/wgpu-web.html
+
+I want it to run in the browser as well. 
+
+- Don't use `pollster`, just annotate an async function for wasm-bindgen start.
+- Can't use `std::Instant`, there's an `instant` library that has the same interface but works on both platforms. 
+- Still blank screen but no error except "Don't mind me, just using exceptions as control flow."
+- Tried to set up the logger to put wgpu errors in the browser console (new deps: console_error_panic_hook, console_log, log) but still nothing.
+- Small brain! I was just being dumb and in rust adding a canvas element as a child of my html canvas and rendering into the second one, so you couldn't see it. Just make it a div. 
+- Now it renders (tiny and in the corner). 
+- Not getting keyboard input. Need to have the canvas grab focus. 
+- Can't just set the canvas size to the window size with css. Need wgpu to know the size so the browser doesn't blurrily upscale. So need to get the dimensions in rust with web_sys. 
+
+Problem: the colours are much darker in the web version. Idk what's up with that. 
+
+I also dislike that I can't run wasm-bindgen from a cargo build script so now I have an ugly shell thing for the web version. 
+
 ## Code generation for fun and profit (Oct 21)
 
 My code for defining blocks is starting to feel a bit insane. Need to change things in many places to add a new block. 
@@ -21,7 +40,7 @@ So maybe that's just a bad idea. Maybe split into two crates and have a buildscr
 - RustRover still can't find the generated file in OUT_DIR.
 
 But fixed both by deleting the `.idea` folder and restarting, so it re-indexed. Maybe that would have worked before.
-Seems like I don't have to redo that when the file changes. Maybe only when adding new ones?
+Seems like I don't always have to redo that when the file changes, but it's unreliable. Clicking into it sometimes gets you an old version. 
 
 Now adding blocks is easy. 
 - Solid: load the texture to the atlas, add its indexes to the list. Choose the right indexes for each shape: cube, grass, or pillar. 

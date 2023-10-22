@@ -1,7 +1,6 @@
 use std::f32::consts::FRAC_PI_2;
-use std::time::Instant;
+use instant::Instant;
 use glam::{Mat4, Vec3, Vec4};
-use wgpu::VertexAttribute;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceEvent, ElementState, KeyboardInput, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent};
 use crate::window::{ref_to_bytes, WindowContext};
@@ -116,7 +115,6 @@ impl CameraHandle {
 }
 
 impl CameraPerspective {
-    const ATTRIBS: Option<&'static [VertexAttribute]> = Some(&wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4]);
     pub(crate) fn as_raw(&self) -> RawCamera {
         RawCamera {
             view_pos: [self.pos.x, self.pos.y, self.pos.z, 1.0],
@@ -153,10 +151,6 @@ impl CameraPerspective {
         let (sin_pitch, cos_pitch) = self.pitch.sin_cos();
         let (sin_yaw, cos_yaw) = self.yaw.sin_cos();
         Vec3::new(cos_pitch * cos_yaw, sin_pitch, cos_pitch * sin_yaw)
-    }
-
-    pub fn position(&self) -> Vec3 {
-        self.pos
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {

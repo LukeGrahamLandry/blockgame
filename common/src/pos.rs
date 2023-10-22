@@ -96,7 +96,7 @@ impl ChunkPos {
 }
 
 impl BlockPos {
-    pub fn of(chunk: ChunkPos, local: LocalPos) -> Self {
+    pub fn of(_chunk: ChunkPos, _local: LocalPos) -> Self {
         todo!()
     }
 

@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::slice;
 use std::mem::size_of;
-use std::time::Instant;
-use image::{GenericImageView, ImageError};
+use instant::Instant;
+use image::{GenericImageView};
 
 use wgpu::PresentMode;
 use winit::dpi::PhysicalSize;
@@ -20,7 +20,7 @@ pub struct Mesh {
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
     pub transform: MeshUniform,
-    pub(crate) info_buffer: Buffer,
+    pub(crate) _info_buffer: Buffer,  // TODO: will need when I want to reuse them.
     pub(crate) info_bind_group: BindGroup,
 }
 
@@ -244,14 +244,16 @@ impl WindowContext {
 
 #[cfg(target_arch = "wasm32")]
 fn platform_setup(window: &mut Window){
-    use winit::dpi::PhysicalSize;
-    window.set_inner_size(PhysicalSize::new(450, 400));
+    use winit::dpi::LogicalSize;
+    let w = web_sys::window().unwrap().inner_width().unwrap().as_f64().unwrap() as u32;
+    let h = web_sys::window().unwrap().inner_height().unwrap().as_f64().unwrap() as u32;
+    window.set_inner_size(LogicalSize::new(w, h));
 
     use winit::platform::web::WindowExtWebSys;
     web_sys::window()
         .and_then(|win| win.document())
         .and_then(|doc| {
-            let dst = doc.get_element_by_id("wasm-example")?;
+            let dst = doc.get_element_by_id("game")?;
             let canvas = web_sys::Element::from(window.canvas());
             dst.append_child(&canvas).ok()?;
             Some(())
@@ -365,19 +367,6 @@ impl WindowContext {
                 push_constant_ranges: &[],
             }
         )
-    }
-
-    pub fn compute_pipeline(&self, label: &str, layout: &PipelineLayout, shader: &str) -> ComputePipeline {
-        let shader = self.device.create_shader_module(ShaderModuleDescriptor {
-            label: Some(&*concat(label, "Compute Shader")),
-            source: ShaderSource::Wgsl(shader.into()),
-        });
-        self.device.create_compute_pipeline(&ComputePipelineDescriptor {
-            label: Some(&*concat(label, "Compute Pipeline")),
-            layout: Some(layout),
-            module: &shader,
-            entry_point: "cs_main",
-        })
     }
 
     pub fn render_pipeline(&self, label: &str, layout: &PipelineLayout, vertex_layouts: &[VertexBufferLayout], shader: &str) -> RenderPipeline {

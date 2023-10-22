@@ -1,17 +1,11 @@
 use std::env;
 use image::{DynamicImage, RgbaImage};
-use crate::pos::{Direction, Tile};
 
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Uv {
     pub x: f32,
     pub y: f32,
     pub size: f32
-}
-
-
-pub struct AtlasData {
-    pub uv_indexes: Box<[usize]>,
 }
 
 pub struct AtlasBuilder {

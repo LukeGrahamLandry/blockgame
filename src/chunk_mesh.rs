@@ -3,7 +3,7 @@ use std::rc::Rc;
 use glam::{Mat4, Vec3, Vec4};
 use wgpu::{BindGroup, BindGroupLayout, RenderPass};
 use common::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos, Tile, Direction};
-use common::atlas::{AtlasData, Uv};
+use common::atlas::Uv;
 use crate::gen;
 use crate::window::{Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, Texture, WindowContext};
 
@@ -82,6 +82,7 @@ impl ChunkList {
                     let pos = LocalPos::new(x as usize, y as usize, z as usize);
                     let tile = chunk.get(pos);
                     if tile.solid() {
+                        // TODO: use DirectionSet?
                         let top = empty(x, y + 1, z);
                         let right = empty(x, y, z + 1);
                         let far = empty(x + 1, y, z);
@@ -108,7 +109,7 @@ impl ChunkList {
         Mat4::from_translation(offset)
     }
 
-    fn init_mesh(&self, vert: &[ModelVertex], indi: &[i32], transform: Mat4) -> Mesh {
+    fn init_mesh(&self, vert: &[ModelVertex], indi: &[u32], transform: Mat4) -> Mesh {
         let vertex_buffer = self.ctx.buffer_init(
             "tri", slice_to_bytes(vert), wgpu::BufferUsages::VERTEX
         );
@@ -135,7 +136,7 @@ impl ChunkList {
             index_buffer,
             num_elements: indi.len() as u32,
             transform,
-            info_buffer,
+            _info_buffer: info_buffer,
             info_bind_group,
         }
     }
@@ -144,7 +145,7 @@ impl ChunkList {
 pub struct MeshBuilder {
     atlas: Rc<TextureAtlas>,
     vert: Vec<ModelVertex>,
-    indi: Vec<i32>,
+    indi: Vec<u32>,
 }
 
 impl MeshBuilder {
@@ -194,12 +195,12 @@ impl MeshBuilder {
         }
     }
 
-    fn vertex(&mut self, uv: [f32; 2], pos: Vec3, a: impl Into<Vec3>) -> i32 {
+    fn vertex(&mut self, uv: [f32; 2], pos: Vec3, a: impl Into<Vec3>) -> u32 {
         self.vert.push(ModelVertex {
             position: Vec4::from(((a.into() + pos), 1.0)).to_array(),
             uv,
         });
-        (self.vert.len() - 1) as i32
+        (self.vert.len() - 1) as u32
     }
 
     // top left, top right, bottom left, bottom right
@@ -212,7 +213,7 @@ impl MeshBuilder {
         self.add_triangle(b, d, c);
     }
 
-    fn add_triangle(&mut self, a: i32, b: i32, c: i32) {
+    fn add_triangle(&mut self, a: u32, b: u32, c: u32) {
         self.indi.push(a);
         self.indi.push(b);
         self.indi.push(c);
@@ -220,8 +221,7 @@ impl MeshBuilder {
 }
 
 pub struct TextureAtlas {
-    pub data: AtlasData,
-    tex: Texture,
+    _tex: Texture,  // Never need to use this, but it needs to stay alive and not call drop.
     pub bind_group: BindGroup,
     pub layout: BindGroupLayout,
 }
@@ -231,9 +231,8 @@ impl TextureAtlas {
         let tex = Self::bake(ctx);
         let layout = ctx.bind_group_layout_texture();
         TextureAtlas {
-            data: gen::get_atlas_data(),
             bind_group: ctx.bind_group_texture(&layout, &tex),
-            tex,
+            _tex: tex,
             layout
         }
     }
@@ -246,10 +245,9 @@ impl TextureAtlas {
     pub fn get(&self, block: Tile, face: Direction) -> &Uv {
         debug_assert!(block.solid());
         let index = (block.index() * 6) + face as usize;
-        gen::uvs::ALL[self.data.uv_indexes[index]]
+        &gen::uvs::ALL[gen::uvs::SOLID_INDEXES[index] as usize]
     }
 }
-
 
 pub mod renderers {
     use glam::Vec3;
@@ -265,8 +263,8 @@ pub mod renderers {
     pub fn sapling(mesh: &mut MeshBuilder, pos: Vec3) {
         let uv = uvs::sapling;
         // These have x/z swapped so it makes a little cross.
-        mesh.add_quad(&uv, pos, [0.0, 1.0, 0.5], [1.0, 1.0, 0.5], [0.0, 0.0, 0.5], [1.0, 0.0, 0.5]);
-        mesh.add_quad(&uv, pos, [0.5, 1.0, 0.0], [0.5, 1.0, 1.0], [0.5, 0.0, 0.0], [0.5, 0.0, 1.0]);
+        mesh.add_quad(uv, pos, [0.0, 1.0, 0.5], [1.0, 1.0, 0.5], [0.0, 0.0, 0.5], [1.0, 0.0, 0.5]);
+        mesh.add_quad(uv, pos, [0.5, 1.0, 0.0], [0.5, 1.0, 1.0], [0.5, 0.0, 0.0], [0.5, 0.0, 1.0]);
     }
 
     pub fn wheat(mesh: &mut MeshBuilder, pos: Vec3) {
@@ -274,11 +272,11 @@ pub mod renderers {
         // This time two quads going across.
         let a = [0.2, 0.8];
         for a in a {
-            mesh.add_quad(&uv, pos, [0.0, 1.0, a], [1.0, 1.0, a], [0.0, 0.0, a], [1.0, 0.0, a]);
+            mesh.add_quad(uv, pos, [0.0, 1.0, a], [1.0, 1.0, a], [0.0, 0.0, a], [1.0, 0.0, a]);
         }
         // Then swap x/z so its like a tick-tac-toe board.
         for a in a {
-            mesh.add_quad(&uv, pos, [a, 1.0, 0.0], [a, 1.0, 1.0], [a, 0.0, 0.0], [a, 0.0, 1.0]);
+            mesh.add_quad(uv, pos, [a, 1.0, 0.0], [a, 1.0, 1.0], [a, 0.0, 0.0], [a, 0.0, 1.0]);
         }
 
     }
