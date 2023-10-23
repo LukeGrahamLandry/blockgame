@@ -20,6 +20,7 @@ common = { path="./common" }
 glam = { workspace=true }
 image = { workspace=true }
 instant = "0.1"
+mlua = { version = "0.9.1", features = ["luajit52", "vendored"] }
 
 [workspace.dependencies]
 glam="0.24.2"  # low-d linear algebra

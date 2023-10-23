@@ -1,3 +1,56 @@
+## A little lua with your rust (Oct 22)
+
+- https://github.com/khvzak/mlua
+
+Idea: write all the game logic in lua.
+
+A few reasons this is interesting. 
+- I don't know how to model a world with entity's other than the OOP way where they all have pointers to each other and rust really hates that. 
+- You can have an in game console with very powerful introspection about the world state, and those console commands just be a lua program. Instead of making a wierd thing that's not quite a programming language like minecraft's commands
+- Making mods would be really easy. Not useful at my scale but aesthetically pleasing. 
+
+Luajit makes it really easy to call c functions. Just write the prototype and it magically knows the calling convention. 
+You can even access struct fields.
+
+My thought is you have lua own all the state (entities, chunks, etc.) and just call into rust when it needs to regenerate a chunk mesh or render a zombie or whatever. 
+Having rust own the world struct is kinda awkward because you have to figure out some way of passing handles to chunks into lua, 
+and it doesn't fix my mutable aliasing problem, so you just end up with a bunch of unsafe code anyway. 
+But still need to be careful that the array of blocks in a chunk is a c struct, so it's packed. 
+I can use LightUserData to pass a raw pointer to lua, but then I can't use it as the jit ffi type without a cast which gets ugly pretty fast. 
+So lua just owning everything seems easiest for now. 
+
+The compiler removes functions if you don't call them (even with no_mangle)
+- Can't put `#[used]` on a function. It's only for static variables. 
+- Tried putting `#[used]` on a static array of function pointers, didn't work.
+- Tried thing in build script and `#![feature(export_executable_symbols)]` but didn't compile. Needs nightly.
+  - https://rust-lang.github.io/rfcs/2841-export-executable-symbols.html
+- Tried `assert_ne!(&generate_chunk as *const _ as usize, 0);`
+- Tried `rustflags = ["-C", "link-args=-rdynamic"]` in `.cargo/config` 
+  - https://stackoverflow.com/questions/43712979/how-to-export-a-symbol-from-a-rust-executable
+- Works: create an array of function pointers at runtime. Don't even need to do anything with it. But can't `let _ = ...`
+
+Current system is rust calls a lua function every tick (currently every frame), lua does whatever logic it wants and calls back into rust when it wants something rendered differently. 
+Also, I think I'd rather do my world generation in rust so the first time lua tries to read a chunk, it calls back into rust. 
+Need to remember to batch the mesh re-generation, so you only do it once per changed chunk at the end of the tick. For testing, the set_block function in lua is always asking for a new mesh. 
+
+There's an unpleasant duplication of little utility functions for working with BlockPos, etc. 
+And I'm offended by using a garbage-collected table for my 3 numbers, so currently I'm just passing them around separately. 
+I might need to get over that. Or maybe commit to exposing all my rust stuff over cffi. I think the ffi structs are still aren't really value objects (just their fields are?).
+So they make more sense for big things where you can shove lots into the one GC handle.
+
+Need to think about how to implement this on wasm (luajit doesn't support it, and neither does mlua wrapper at all https://github.com/khvzak/mlua/issues/23).
+Default lua (non-jit) still gives ways for the host to define callbacks. mlua has nice wrappers that do the conversion of arguments to rust types, 
+so they're not even that bad to write, the functions just also take a &Lua first parameter. But that still doesn't work with wasm-unknown-unknown, maybe emnscripten?
+But I recall that sucks for making wgpu work. 
+
+Maybe it would be smarter to just find a tiny embeddable javascript, so you get it for free in the browser. 
+Browser js can easily call wasm c abi functions (but can't seamlessly access fields of structs). 
+Idk if there exists a tiny JS jit with good c ffi. And I kinda find lua cute in way JS doesn't because it's too popular of a language. 
+Maybe that's a bit deranged and I just need to get over it. Another tempting option is transpiling my lua to JS. 
+That would be a pleasing combination of my compiler obsession with my graphics obsession. 
+
+There's still some code experimenting with having chunks owned by rust that I need to remove, but I feel I should commit this before I break something. 
+
 ## Look at me; I am the JS now (Oct 21)
 
 - https://gfx-rs.github.io/2020/04/21/wgpu-web.html

@@ -1,22 +1,29 @@
-mod camera;
+pub mod camera;
 pub mod window;
-mod chunk_mesh;
-mod gen;
+pub mod chunk_mesh;
+pub mod gen;
+pub mod lua_api;
+pub mod world;
+pub mod pos;
 
 use std::mem::size_of;
 use std::rc::Rc;
+use mlua::{Function, LightUserData, Lua};
 use wgpu::RenderPipeline;
 use winit::event::{DeviceEvent, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event::ElementState::Pressed;
 use winit::window::CursorGrabMode;
 use crate::camera::{CameraController, CameraHandle, SpectatorCameraController};
 use crate::chunk_mesh::{ChunkList, TextureAtlas};
-use common::pos::{Chunk, ChunkPos, LocalPos, Tile};
+use crate::pos::{Chunk, ChunkPos, LocalPos};
 use crate::window::{App, ModelVertex, Texture, WindowContext};
 use common;
+use common::pos::Tile;
+use std::ffi::c_void;
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
+use crate::world::LogicChunks;
 
 #[cfg(target_arch="wasm32")]
 #[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
@@ -35,8 +42,17 @@ pub struct State {
     chunks: ChunkList,
     controller: SpectatorCameraController,
     atlas: Rc<TextureAtlas>,
-    cursor_lock: bool
+    cursor_lock: bool,
+    world: LogicChunks,
+    lua: Lua
 }
+
+
+#[no_mangle]
+pub extern "C" fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
 
 impl App for State {
     fn new(ctx: Rc<WindowContext>) -> Self {
@@ -63,8 +79,16 @@ impl App for State {
         );
 
         let mut chunks = ChunkList::new(ctx.clone(), atlas.clone(), info_bind_group_layout);
+        let world = init_world();
+        world.update_meshes(&mut chunks);
 
-        init_world(&mut chunks);
+
+        println!("rs: {}", add(1, 2));
+        let lua = unsafe {
+            Lua::unsafe_new()
+        };
+
+        lua.load(include_str!("../logic/world.lua")).exec().unwrap();
 
         State {
             ctx,
@@ -75,6 +99,8 @@ impl App for State {
             controller: SpectatorCameraController::new(30.0, 0.4),
             atlas,
             cursor_lock: true,
+            world,
+            lua,
         }
     }
 
@@ -118,6 +144,10 @@ impl App for State {
 
     fn update(&mut self) {
         self.controller.update(&self.ctx, &mut self.camera);
+
+        let tick_chunk: Function = self.lua.globals().get("run_tick").unwrap();
+        // TODO: Lua needs to not be on this struct? since I want to pass the mutable ref over the rest away.
+        let _: () = tick_chunk.call(LightUserData(self as *const _ as *mut c_void)).unwrap();
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -154,9 +184,10 @@ impl App for State {
 }
 
 // Just fill it with a bunch of random stuff for debugging.
-fn init_world(chunks: &mut ChunkList) {
-    let mut chunk = Chunk::full(Tile::EMPTY);
-    chunks.update_mesh(ChunkPos::new(0, 2, 0), &chunk);
+fn init_world() -> LogicChunks {
+    let mut world = LogicChunks::new();
+    let mut chunk = Chunk::full(Tile::EMPTY, ChunkPos::new(0, 2, 0));
+    *world.get_or_gen(ChunkPos::new(0, 2, 0)) = chunk.clone();
 
     for i in 0..16 {
         for j in 0..16 {
@@ -167,20 +198,24 @@ fn init_world(chunks: &mut ChunkList) {
         chunk.set(LocalPos::new(0, 1, i), gen::tiles::dirt);
     }
 
-    chunks.update_mesh(ChunkPos::new(0, 0, 0), &chunk);
-    chunks.update_mesh(ChunkPos::new(0, 0, 1), &chunk);
-    chunks.update_mesh(ChunkPos::new(0, 0, 2), &chunk);
+    chunk.pos = ChunkPos::new(0, 0, 0);
+    *world.get_or_gen(ChunkPos::new(0, 0, 0)) = chunk.clone();
+    *world.get_or_gen(ChunkPos::new(0, 0, 1)) = chunk.clone();
+    chunk.pos = ChunkPos::new(0, 0, 1);
+    *world.get_or_gen(ChunkPos::new(0, 0, 2)) = chunk.clone();
+    chunk.pos = ChunkPos::new(0, 0, 2);
+
     for i in 0..16 {
         for j in 0..16 {
             chunk.set(LocalPos::new(j, 2, i), gen::tiles::grass);
         }
     }
-    chunks.update_mesh(ChunkPos::new(1, 1, 1), &chunk);
+    *world.get_or_gen(ChunkPos::new(1, 1, 2)) = chunk.clone();
 
-    chunk = Chunk::full(gen::tiles::stone);
-    chunks.update_mesh(ChunkPos::new(0, 1, 2), &chunk);
+    chunk = Chunk::full(gen::tiles::stone, ChunkPos::new(0, 1, 2));
+    *world.get_or_gen(ChunkPos::new(0, 1, 2)) = chunk.clone();
 
-    chunk = Chunk::full(Tile::EMPTY);
+    chunk = Chunk::full(Tile::EMPTY, ChunkPos::new(0, 0, -1));
     let solids = [
         gen::tiles::stone, gen::tiles::dirt,gen::tiles::grass,gen::tiles::log,gen::tiles::leaf,gen::tiles::wheat_solid, gen::tiles::sapling_solid
     ];
@@ -191,9 +226,9 @@ fn init_world(chunks: &mut ChunkList) {
             }
         }
     }
-    chunks.update_mesh(ChunkPos::new(0, 0, -1), &chunk);
+    *world.get_or_gen(ChunkPos::new(0, 0, -1)) = chunk.clone();
 
-    chunk = Chunk::full(Tile::EMPTY);
+    chunk = Chunk::full(Tile::EMPTY, ChunkPos::new(-1, 0, -1));
     let custom = [
         gen::tiles::sapling, gen::tiles::wheat,
     ];
@@ -204,5 +239,7 @@ fn init_world(chunks: &mut ChunkList) {
             }
         }
     }
-    chunks.update_mesh(ChunkPos::new(-1, 0, -1), &chunk);
+    *world.get_or_gen(ChunkPos::new(-1, 0, -1)) = chunk.clone();
+
+    world
 }

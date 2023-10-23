@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use glam::{Mat4, Vec3, Vec4};
 use wgpu::{BindGroup, BindGroupLayout, RenderPass};
-use common::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos, Tile, Direction};
+use crate::pos::{ChunkPos, Chunk, CHUNK_SIZE, LocalPos, Direction};
 use common::atlas::Uv;
+use common::pos::Tile;
 use crate::gen;
 use crate::window::{Mesh, MeshUniform, ModelVertex, ref_to_bytes, slice_to_bytes, Texture, WindowContext};
 
