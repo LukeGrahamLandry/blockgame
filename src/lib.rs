@@ -19,10 +19,10 @@ use crate::pos::{Chunk, ChunkPos, LocalPos};
 use crate::window::{App, ModelVertex, Texture, WindowContext};
 use common;
 use common::pos::Tile;
-use std::ffi::c_void;
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
+use crate::lua_api::GameLogic;
 use crate::world::LogicChunks;
 
 #[cfg(target_arch="wasm32")]
@@ -44,7 +44,7 @@ pub struct State {
     atlas: Rc<TextureAtlas>,
     cursor_lock: bool,
     world: LogicChunks,
-    lua: Lua
+    logic: &'static GameLogic
 }
 
 
@@ -82,13 +82,7 @@ impl App for State {
         let world = init_world();
         world.update_meshes(&mut chunks);
 
-
-        println!("rs: {}", add(1, 2));
-        let lua = unsafe {
-            Lua::unsafe_new()
-        };
-
-        lua.load(include_str!("../logic/world.lua")).exec().unwrap();
+        let logic = Box::new(GameLogic::new());
 
         State {
             ctx,
@@ -100,7 +94,7 @@ impl App for State {
             atlas,
             cursor_lock: true,
             world,
-            lua,
+            logic: Box::leak(logic),  // Leaking this means you can pass the &mut self to function in lua since we're borrowing from the universe instead of ourself
         }
     }
 
@@ -144,10 +138,7 @@ impl App for State {
 
     fn update(&mut self) {
         self.controller.update(&self.ctx, &mut self.camera);
-
-        let tick_chunk: Function = self.lua.globals().get("run_tick").unwrap();
-        // TODO: Lua needs to not be on this struct? since I want to pass the mutable ref over the rest away.
-        let _: () = tick_chunk.call(LightUserData(self as *const _ as *mut c_void)).unwrap();
+        self.logic.run_tick(self);
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

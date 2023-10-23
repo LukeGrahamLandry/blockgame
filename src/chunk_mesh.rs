@@ -16,7 +16,6 @@ pub struct ChunkList {
 
     // Old meshes not currently in use. When loading a new chunk, check if there's one here,
     // since I assume it's cheaper to update a buffer than create a new one.
-    // TODO: make sure to check that there's enough space in the buffer before writing. Resizing will amortize.
     mesh_pool: Vec<Mesh>
 }
 
@@ -49,15 +48,22 @@ impl ChunkList {
     const MAX_ALLOC_POOL: usize = 20;
 
     pub fn update_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) {
+        // println!("Meshes: {} + {}", self.chunks.len(), self.mesh_pool.len());
         if chunk.is_empty() {
-            if let Some(old) = self.chunks.remove(&pos) {
-                if self.mesh_pool.len() < Self::MAX_ALLOC_POOL {
-                    self.mesh_pool.push(old);
-                }
-            }
+            let old = self.chunks.remove(&pos);
+            self.recycle(old);
         } else {
             let mesh = self.build_mesh(pos, chunk);
-            self.chunks.insert(pos, mesh);
+            let old = self.chunks.insert(pos, mesh);
+            self.recycle(old);
+        }
+    }
+
+    fn recycle(&mut self, mesh: Option<Mesh>) {
+        if let Some(old) = mesh {
+            if self.mesh_pool.len() < Self::MAX_ALLOC_POOL {
+                self.mesh_pool.push(old);
+            }
         }
     }
 
@@ -83,6 +89,7 @@ impl ChunkList {
                     let pos = LocalPos::new(x as usize, y as usize, z as usize);
                     let tile = chunk.get(pos);
                     if tile.solid() {
+                        debug_assert!(tile.index() <= gen::tiles::SOLID_COUNT, "Invalid tile {:?} at {:?} {:?}. Damn you lua!", tile, chunk.pos, pos);
                         // TODO: use DirectionSet?
                         let top = empty(x, y + 1, z);
                         let right = empty(x, y, z + 1);
@@ -93,6 +100,7 @@ impl ChunkList {
                         self.builder.add_cube(tile, pos.normalized() * Self::CHUNK_SCALE, top, bottom, left, right, close, far);
                         count += 1;
                     } else if tile.custom_render() {
+                        debug_assert!(tile.index() <= gen::tiles::CUSTOM_COUNT, "Invalid tile {:?} at {:?} {:?}. Damn you lua!", tile, chunk.pos, pos);
                         let func = gen::render::FUNCS[tile.index()];
                         func(&mut self.builder, pos.normalized() * Self::CHUNK_SCALE);
                     }
@@ -100,9 +108,15 @@ impl ChunkList {
             }
         }
 
-        println!("Mesh({}, {}, {}): {} vertices, {} indices, {} cubes.", pos.x, pos.y, pos.z, self.builder.vert.len(), self.builder.indi.len(), count);
+        // println!("Mesh({}, {}, {}): {} vertices, {} indices, {} cubes.", pos.x, pos.y, pos.z, self.builder.vert.len(), self.builder.indi.len(), count);
 
-        self.init_mesh(&self.builder.vert, &self.builder.indi, Self::translate(pos))
+        match self.mesh_pool.pop() {
+            None => self.init_mesh(&self.builder.vert, &self.builder.indi, Self::translate(pos)),
+            Some(mut mesh) => {
+                self.reuse_mesh(&mut mesh, &self.builder.vert, &self.builder.indi, Self::translate(pos));
+                mesh
+            }
+        }
     }
 
     fn translate(pos: ChunkPos) -> Mat4 {
@@ -110,12 +124,43 @@ impl ChunkList {
         Mat4::from_translation(offset)
     }
 
+    // This checks that there's enough space in the buffer before writing. Resizing will amortize.
+    fn reuse_mesh(&self, mesh: &mut Mesh, vert: &[ModelVertex], indi: &[u32], transform: Mat4)  {
+        let vert_b = slice_to_bytes(vert);
+        let indi_b = slice_to_bytes(indi);
+
+        if vert_b.len() <= mesh.vertex_buffer.size() as usize {
+            self.ctx.write_buffer(&mesh.vertex_buffer, vert_b);
+        } else {
+            mesh.vertex_buffer = self.ctx.buffer_init(
+                "tri", vert_b, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
+            );
+        }
+
+        if indi_b.len() <= mesh.index_buffer.size() as usize {
+            self.ctx.write_buffer(&mesh.index_buffer, indi_b);
+        } else {
+            mesh.index_buffer = self.ctx.buffer_init(
+                "tri", indi_b, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST
+            );
+        }
+
+        let transform = MeshUniform {
+            transform: transform.to_cols_array_2d(),
+        };
+
+        // Never need to resize, info length is fixed.
+        self.ctx.write_buffer(&mesh._info_buffer, ref_to_bytes(&transform));
+
+        mesh.num_elements = indi.len() as u32;
+    }
+
     fn init_mesh(&self, vert: &[ModelVertex], indi: &[u32], transform: Mat4) -> Mesh {
         let vertex_buffer = self.ctx.buffer_init(
-            "tri", slice_to_bytes(vert), wgpu::BufferUsages::VERTEX
+            "tri", slice_to_bytes(vert), wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
         );
         let index_buffer = self.ctx.buffer_init(
-            "tri", slice_to_bytes(indi), wgpu::BufferUsages::INDEX
+            "tri", slice_to_bytes(indi), wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST
         );
 
         let transform = MeshUniform {
@@ -156,6 +201,7 @@ impl MeshBuilder {
     }
 
     fn add_cube(&mut self, tile: Tile, pos: Vec3, top: bool, bottom: bool, left: bool, right: bool, close: bool, far: bool) {
+        debug_assert!(tile.solid());
         let down_close_left = [0.0, 0.0, 0.0];
         let down_close_right = [0.0, 0.0, 1.0];
         let down_far_left = [1.0, 0.0, 0.0];

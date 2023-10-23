@@ -1,3 +1,8 @@
+## Cleaning up lua api boundary
+
+Since I'm generating the list of block id constants for rust anyway, it's super easy to have it spit out a lua file as well. 
+Maybe you'd rather generate that off the rust data at runtime, so it doesn't take up space in the binary but eh, code isn't free either so this is fine for now. 
+
 ## A little lua with your rust (Oct 22)
 
 - https://github.com/khvzak/mlua
