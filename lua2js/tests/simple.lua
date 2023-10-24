@@ -1,0 +1,31 @@
+local a = 10
+print(a)
+local b = a + 1
+print(b)
+
+print(1 + 5)
+print(1 - 5)
+print(5 - 1)
+print(1 - 5)
+print(5 * 10)
+print(10 * 0.5)
+print(5 / 10)
+print(10 / 2)
+print(11 % 2)
+print("a" .. "b")
+print(1 < 5)
+print(1 <= 5)
+print(5 <= 5)
+print(1 > 5)
+print(1 <= 5)
+print(5 <= 5)
+print(1 == 5)
+print(5 == 5)
+print(1 ~= 5)
+print(5 ~= 5)
+
+-- Wierd ones
+print((-1) % 10)
+print(0.5 % 10)
+print(0.5 % 0.25)
+print(1 % -10)

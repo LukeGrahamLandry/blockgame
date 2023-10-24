@@ -8,7 +8,8 @@ crate-type = ["cdylib", "rlib"]
 
 [workspace]
 members = [
-    "common"
+    "common",
+    "lua2js"
 ]
 
 [dependencies]

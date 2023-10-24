@@ -1,3 +1,23 @@
+## Lua in the browser (Oct 24)
+
+A few options to consider
+- Find a lua vm that will run in wasm. But couldn't find one that lets you do ffi as seamlessly as luajit. Also, it seems sad to bring my own shitty interpreter that can't even jit when V8 is just sitting there. 
+- Write the thing in js instead and find a little js vm for native. Seems unlikely to find a tiny jit that also lets you call c functions without writing boilerplate. 
+Even in the browser, js can't seamlessly access fields of wasm structs.
+- Transpile lua to JS! More work but means more control over the output. Feels like I could get the ffi stuff to work if I find a c parser, and maybe use a typed dialect of lua, so I get more information. 
+
+Start with the simple thing for math. 
+- It gets a bit wierd when they don't define things (like mod for negative numbers) the same, so I have to call a little function. 
+Will also have to redo all this if I want to use lua's operator overloading. 
+
+For using `require` to get modules, I'll just intercept that and define my own object that forwards to JS stuff. 
+- Hard to test trig functions because they print high precision floats differently. 
+- Hard to test random numbers. 
+- Why doesn't `{ ...Math, pi: Math.PI }` work? Is Math not a real object somehow>? Manually assigning individual fields works. 
+- Need to figure out how to use js object prototypes. I want my math object to forward to the js one, so I don't need to define everything (both languages have floor, sin, cos, etc). 
+But maybe it's better to do it manually, so I have a hard error for things I didn't test yet. 
+- Should cleverly only include the parts of my little runtime thingy that are actually used by the program. 
+
 ## Random ticks & cleanup (Oct 22)
 
 Since I'm generating the list of block id constants for rust anyway, it's super easy to have it spit out a lua file as well. 
