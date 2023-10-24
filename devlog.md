@@ -1,7 +1,16 @@
-## Cleaning up lua api boundary
+## Random ticks & cleanup (Oct 22)
 
 Since I'm generating the list of block id constants for rust anyway, it's super easy to have it spit out a lua file as well. 
 Maybe you'd rather generate that off the rust data at runtime, so it doesn't take up space in the binary but eh, code isn't free either so this is fine for now. 
+
+The default Debug printing of lua errors by unwrap doesn't format it on multiple lines, so unwrap_or_else to panic with Display. 
+
+Profiled it. Doing the update mesh at the end of the frame and only if a block had actually changed to something new make. 
+Time in update_mesh went from ~30% to ~2%. Back to barely being able to see my code. (The test was with no vsync and uselessly setting the same block to stone every tick). 
+
+Started having a naming convention of bx/lx/cx for x coord of BlocPos/LocalPos/ChunkPos which feels very fragile. 
+
+Did random ticks for growing wheat. Every frame has a chance to pick a random chunk, if a chunk is chosen, some number of its blocks get a chance to tick.
 
 ## A little lua with your rust (Oct 22)
 

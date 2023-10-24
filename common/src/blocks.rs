@@ -57,6 +57,10 @@ impl BlockInit {
 
         self.simple_custom("sapling.png");
         self.simple_custom("wheat.png");
+        self.simple_custom("wheat1.png");
+        self.simple_custom("wheat2.png");
+        self.simple_custom("wheat3.png");
+        // self.plant(["wheat.png", "wheat1.png"], 5);
     }
 
     fn code(&self) -> String {

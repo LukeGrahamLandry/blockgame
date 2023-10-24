@@ -388,7 +388,14 @@ impl WindowContext {
                 targets: &[Some(ColorTargetState {
                     format: self.config.borrow().format,
                     // TODO: is this slower than REPLACE? Is it worth having two pipelines where one does things that I know don't have transparency and then you draw the rest on top?
-                    blend: Some(BlendState::ALPHA_BLENDING),
+                    blend: Some(BlendState {
+                        color: BlendComponent {
+                            src_factor: BlendFactor::SrcAlpha,
+                            dst_factor: BlendFactor::OneMinusSrcAlpha,
+                            operation: BlendOperation::Add,
+                        },
+                        alpha: BlendComponent::OVER,
+                    }),
                     write_mask: ColorWrites::ALL,
                 })],
             }),
@@ -411,7 +418,7 @@ impl WindowContext {
             multisample: MultisampleState {
                 count: 1,
                 mask: !0,
-                alpha_to_coverage_enabled: false,
+                alpha_to_coverage_enabled: true,
             },
             multiview: None,
         })

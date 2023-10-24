@@ -15,14 +15,16 @@ impl GameLogic {
         };
 
         lua.load(include_str!(concat!(env!("OUT_DIR"), "/gen.lua"))).exec().unwrap();
-        lua.load(include_str!("../logic/blocks.lua")).exec().unwrap();
         lua.load(include_str!("../logic/world.lua")).exec().unwrap();
+        lua.load(include_str!("../logic/blocks.lua")).exec().unwrap();
 
         Self { lua }
     }
     pub fn run_tick(&self, state: &mut State) {
         let tick_chunk: Function = self.lua.globals().get("run_tick").unwrap();
-        let _: () = tick_chunk.call(LightUserData(state as *const _ as *mut c_void)).unwrap();
+        let _: () = tick_chunk.call(LightUserData(state as *const _ as *mut c_void)).unwrap_or_else(|e| {
+            panic!("{}", e);
+        });
     }
 }
 

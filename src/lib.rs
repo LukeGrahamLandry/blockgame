@@ -189,18 +189,30 @@ fn init_world() -> LogicChunks {
         chunk.set(LocalPos::new(0, 1, i), gen::tiles::dirt);
     }
 
+    chunk.pos = ChunkPos::new(0, 0, 1);
+    *world.get_or_gen(ChunkPos::new(0, 0, 1)) = chunk.clone();
+    chunk.pos = ChunkPos::new(0, 0, 2);
+    *world.get_or_gen(ChunkPos::new(0, 0, 2)) = chunk.clone();
+
+    for i in 0..16 {
+        for j in 0..16 {
+            chunk.set(LocalPos::new(j, 0, i), gen::tiles::dirt);
+        }
+    }
+    for i in 0..16 {
+        for j in 0..16 {
+            chunk.set(LocalPos::new(j, 1, i), gen::tiles::wheat1);
+        }
+    }
     chunk.pos = ChunkPos::new(0, 0, 0);
     *world.get_or_gen(ChunkPos::new(0, 0, 0)) = chunk.clone();
-    *world.get_or_gen(ChunkPos::new(0, 0, 1)) = chunk.clone();
-    chunk.pos = ChunkPos::new(0, 0, 1);
-    *world.get_or_gen(ChunkPos::new(0, 0, 2)) = chunk.clone();
-    chunk.pos = ChunkPos::new(0, 0, 2);
 
     for i in 0..16 {
         for j in 0..16 {
             chunk.set(LocalPos::new(j, 2, i), gen::tiles::grass);
         }
     }
+    chunk.pos = ChunkPos::new(1, 1, 2);
     *world.get_or_gen(ChunkPos::new(1, 1, 2)) = chunk.clone();
 
     chunk = Chunk::full(gen::tiles::stone, ChunkPos::new(0, 1, 2));

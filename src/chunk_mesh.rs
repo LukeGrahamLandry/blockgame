@@ -83,9 +83,9 @@ impl ChunkList {
         };
 
         let mut count = 0;
-        for x in 0..(CHUNK_SIZE as isize) {
+        for x in (0..(CHUNK_SIZE as isize))  {
             for y in 0..(CHUNK_SIZE as isize) {
-                for z in 0..(CHUNK_SIZE as isize) {
+                for z in 0..(CHUNK_SIZE as isize)  {
                     let pos = LocalPos::new(x as usize, y as usize, z as usize);
                     let tile = chunk.get(pos);
                     if tile.solid() {
@@ -298,6 +298,7 @@ impl TextureAtlas {
 
 pub mod renderers {
     use glam::Vec3;
+    use common::atlas::Uv;
     use crate::chunk_mesh::{MeshBuilder};
     use crate::gen::uvs;
 
@@ -314,8 +315,21 @@ pub mod renderers {
         mesh.add_quad(uv, pos, [0.5, 1.0, 0.0], [0.5, 1.0, 1.0], [0.5, 0.0, 0.0], [0.5, 0.0, 1.0]);
     }
 
+    // TODO: no copy paste! render funcs need to get their tile?
     pub fn wheat(mesh: &mut MeshBuilder, pos: Vec3) {
-        let uv = uvs::wheat;
+        plant(mesh, pos,uvs::wheat);
+    }
+    pub fn wheat1(mesh: &mut MeshBuilder, pos: Vec3) {
+        plant(mesh, pos,uvs::wheat1);
+    }
+    pub fn wheat2(mesh: &mut MeshBuilder, pos: Vec3) {
+        plant(mesh, pos,uvs::wheat2);
+    }
+    pub fn wheat3(mesh: &mut MeshBuilder, pos: Vec3) {
+        plant(mesh, pos,uvs::wheat3);
+    }
+
+    fn plant(mesh: &mut MeshBuilder, pos: Vec3, uv: &Uv) {
         // This time two quads going across.
         let a = [0.2, 0.8];
         for a in a {
@@ -325,6 +339,5 @@ pub mod renderers {
         for a in a {
             mesh.add_quad(uv, pos, [a, 1.0, 0.0], [a, 1.0, 1.0], [a, 0.0, 0.0], [a, 0.0, 1.0]);
         }
-
     }
 }

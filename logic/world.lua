@@ -1,9 +1,8 @@
 local ffi = require("ffi")
 local math = require("math")
+local string = require("string")
 
 ffi.cdef[[
-int printf(const char *fmt, ...);
-int add(int a, int b);
 typedef unsigned short u16;
 typedef int i32;
 typedef struct Tile { u16 v; } Tile;
@@ -18,10 +17,6 @@ void generate_chunk(void* state, Chunk* chunk);
 void update_mesh(void* state, Chunk* chunk);
 
 ]]
-local package = require("package")
-for i, v in pairs(package.loaders) do
-    print(i, v)
-end
 
 --- @generic A
 --- @param cls A
@@ -35,8 +30,15 @@ end
 local random_tick_delay_sec = 0.1  -- each chunk should tick once every x seconds
 local blocks_per_random_tick = 4000  -- each time a chunk gets ticked, x blocks will get ticked
 local ticks_per_sec = 60
+local chunk_size = 16
 
-CHUNK_SIZE = 16
+-- TODO: give a way to remove this. rust replace conditionally?
+function debug_assert(c, msg, ...)
+    local arg={...}
+    if not c then
+        error(string.format(msg, unpack(arg)))
+    end
+end
 
 World = {
     chunks = {},
@@ -51,7 +53,7 @@ World = {
             chunk.x = x
             chunk.y = y
             chunk.z = z
-            ffi.C.generate_chunk(current_state, chunk)
+            ffi.C.generate_chunk(rust_state, chunk)
             self.any_chunk_dirty = true
             self.chunks[key] = chunk
         end
@@ -68,7 +70,7 @@ World = {
 
     set_block_local = function(self, chunk, lx, ly, lz, tile)
         local index = local_to_index(lx, ly, lz)
-        -- TODO: some sort of type safety so you can't just pass random numbers in
+        -- TODO: some sort of type safety so you can't just pass random numbers in. for now, debug mode rust checks when generating the mesh
         local old = chunk.tiles[index].v
         chunk.tiles[index].v = tile
         if old ~= tile then
@@ -77,16 +79,31 @@ World = {
         end
     end,
 
-    -- indexes are undefined and inconsistent. useful for choosing a random chunk
+    get_block = function(self, bx, by, bz)
+        local cx, cy, cz = block_to_chunk_pos(bx, by, bz)
+        local lx, ly, lz = block_to_local_pos(bx, by, bz)
+        local chunk = self:get_chunk(cx, cy, cz)
+        return self.get_block_local(chunk, lx, ly, lz)
+    end,
+
+    -- TODO: its a little dumb that this is in the World table but isn't a method so has different syntax to call
+    get_block_local = function(chunk, lx, ly, lz)
+        local index = local_to_index(lx, ly, lz)
+        return chunk.tiles[index].v
+    end,
+
+    -- Indexes are undefined and inconsistent. Only useful for choosing a random chunk
+    --- @param i number
     get_chunk_index = function(self, i)
         -- TODO: this is kinda dumb
         local count = 0
-        for key, chunk in pairs(self.chunks) do
+        for _, chunk in pairs(self.chunks) do
             count = count + 1
             if count == i then
                 return chunk
             end
         end
+        debug_assert(false, "get_chunk_index %d out of bounds", i)
     end,
 
     -- TODO: track separately since I know when a chunk is added
@@ -96,9 +113,8 @@ World = {
 
     do_random_ticks = function(self, chunk)
         for i=1,blocks_per_random_tick do
-            local lx, ly, lz = math.random(0, CHUNK_SIZE-1), math.random(0, CHUNK_SIZE-1), math.random(0, CHUNK_SIZE-1)
-            local tile = chunk.tiles[local_to_index(lx, ly, lz)]
-            local handler = block_random_tick_handlers[tile.v]
+            local lx, ly, lz = math.random(0, chunk_size -1), math.random(0, chunk_size -1), math.random(0, chunk_size -1)
+            local handler = block_random_tick_handlers[self.get_block_local(chunk, lx, ly, lz)]
             if handler ~= nil then
                 handler(self, chunk, lx, ly, lz)
             end
@@ -115,38 +131,35 @@ function table_len(t)
     return count
 end
 
+-- TODO: how does lua % work on negative numbers
+
 function block_to_chunk_pos(bx, by, bz)
-    return (bx - (bx % CHUNK_SIZE)) / CHUNK_SIZE, (by - (by % CHUNK_SIZE)) / CHUNK_SIZE, (bz - (bz % CHUNK_SIZE)) / CHUNK_SIZE
+    return (bx - (bx % chunk_size)) / chunk_size, (by - (by % chunk_size)) / chunk_size, (bz - (bz % chunk_size)) / chunk_size
 end
 
 function block_to_local_pos(bx, by, bz)
-    return bx % CHUNK_SIZE, by % CHUNK_SIZE, bz % CHUNK_SIZE
+    return bx % chunk_size, by % chunk_size, bz % chunk_size
 end
 
 function local_to_index(lx, ly, lz)
-    return (ly * CHUNK_SIZE * CHUNK_SIZE) + (lx * CHUNK_SIZE) + lz
+    debug_assert(lx < chunk_size and ly < chunk_size and lz < chunk_size and lx >= 0 and ly >= 0 and lz >= 0, "local chunk index (%d, %d, %d) out of bounds.", lx, ly, lz)
+    return (ly * chunk_size * chunk_size) + (lx * chunk_size) + lz
 end
 
 the_world = new(World)
-current_state = nil
-a = true
-b = 0
-c = 0
-
+rust_state = nil  -- TODO: this sucks, but I don't really want to pass around rust privileges everywhere
 
 function run_tick(state)
-    current_state = state
+    rust_state = state
     the_world:set_block(0, 0, 0, gen.tiles.stone)
 
     local count = the_world:chunk_count()
-    print(count)
     if count > 0 then
         -- Each chunk ticks every x so one of n chunks ticks every x/n
         local adjusted_tick_rate = (random_tick_delay_sec * ticks_per_sec) / count
         local do_tick = math.random(adjusted_tick_rate) == 1
         if do_tick then
             local chunk = the_world:get_chunk_index(math.random(count))
-            print("tick!", chunk)
             the_world:do_random_ticks(chunk)
         end
     end
@@ -156,7 +169,7 @@ function run_tick(state)
     if the_world.any_chunk_dirty then
         the_world.any_chunk_dirty = false
         for key, chunk in pairs(the_world.chunks) do
-            ffi.C.update_mesh(current_state, chunk)
+            ffi.C.update_mesh(rust_state, chunk)
         end
     end
 end
