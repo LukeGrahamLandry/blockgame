@@ -31,9 +31,31 @@ pub mod lua {
             });
         }
     }
-
 }
 
+#[cfg(target_arch = "wasm32")]
+pub mod lua {
+    use mlua::{Function, LightUserData, Lua};
+    use std::ffi::c_void;
+    use crate::State;
+
+    pub struct GameLogic {}
+
+    impl GameLogic {
+        pub fn new() -> Self {
+            Self {}
+        }
+
+        pub fn run_tick(&self, state: &mut State) {
+            tick_chunk(state);
+        }
+    }
+
+    #[wasm_bindgen]
+    extern "C" {
+        fn tick_chunk(state: &mut State);
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn generate_chunk(state: &mut State, chunk: &mut Chunk) {

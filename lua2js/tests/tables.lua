@@ -8,6 +8,8 @@ print(fruits.apple)
 print(fruits["apple"])
 fruits.apple = 10
 print(fruits.apple)
+fruits["apple"] = 15
+print(fruits.apple)
 
 local numbers = {
     [1] = 5,

@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 full_moon = { version = "0.18.1", features = ["roblox"], default-features = false }
+seesea = { path = "../../seesea", default-features = false }  # https://github.com/LukeGrahamLandry/seesea

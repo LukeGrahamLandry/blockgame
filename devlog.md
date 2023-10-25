@@ -1,3 +1,21 @@
+# Lua wasm ffi (Oct 25)
+
+- https://github.com/LukeGrahamLandry/seesea
+
+Node supports wasm just like the browser so testing locally is still easy. 
+Setup a little test rust library that builds to wasm and then load it in node so generated js can access. 
+I don't want to fight with getting luajit to find the library so just write a rust wrapper that links to it, loads a lua file, and uses mlua to run it like the game will. 
+
+Conveniently, I have another project where I wrote part of a c compiler and I *think* its parser is enough for dealing with `ffi.cdef`. 
+I want this to only be a build time dependency, but might need to ship it to the browser if I eventually want a nice lua console in the game. 
+
+Calling wasm function doesn't even need to parse any c headers. 
+JS gives you the same transparent argument conversion as luajit, so can just do it lexically. 
+Need to go through and make sure they handle weird type conversions the same at some point. 
+
+luajit handles allocating and garbage collecting memory created by `ffi.new` so I need to do that myself for wasm. 
+- https://github.com/rustwasm/wee_alloc
+
 ## Lua in the browser (Oct 24)
 
 - https://github.com/Kampfkarren/full-moon

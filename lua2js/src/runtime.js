@@ -85,6 +85,7 @@ const LuaHelper = (() => {
         // TODO: the compiler could notice when the expression can't have side effects and emit the normal syntax if it's absolutely sure.
         method_call: (receiver, method_name, ...args) => receiver[method_name].apply(null, [receiver, ...args]),
         modules: {
+            ffi: {},  // TODO: have cdef put functions from wasm onto a C object here so the generated code looks more like the original. its a step towards not forcing the variable to be called ffi
             math: {
                 floor: Math.floor,
                 sin: Math.sin,

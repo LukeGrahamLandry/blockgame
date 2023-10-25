@@ -34,4 +34,3 @@ Call
 
 -- TODO: js does one line, lua does many lines. easy to fix, just don't call console.log directly. have a helper that unpacks args into many calls.
 -- print(1, 2, 3)
-

@@ -2,15 +2,16 @@ local ffi = require("ffi")
 local math = require("math")
 --local string = require("string")
 
+-- TODO: seesea doesn't recognise 'unsigned' yet
 ffi.cdef[[
-typedef unsigned short u16;
+typedef short u16;
 typedef int i32;
 typedef struct Tile { u16 v; } Tile;
 
 typedef struct Chunk {
     i32 x; i32 y; i32 z;
-    Tile tiles[16*16*16];
-    bool dirty;
+    Tile tiles[4096];  // TODO: seesea can't evaluate expressions here (16*16*16)
+    char dirty;  // TODO: seesea doesn't know bool yet
 } Chunk;
 
 void generate_chunk(void* state, Chunk* chunk);
