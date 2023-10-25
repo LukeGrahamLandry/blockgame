@@ -1,5 +1,7 @@
 ## Lua in the browser (Oct 24)
 
+- https://github.com/Kampfkarren/full-moon
+
 A few options to consider
 - Find a lua vm that will run in wasm. But couldn't find one that lets you do ffi as seamlessly as luajit. Also, it seems sad to bring my own shitty interpreter that can't even jit when V8 is just sitting there. 
 - Write the thing in js instead and find a little js vm for native. Seems unlikely to find a tiny jit that also lets you call c functions without writing boilerplate. 
@@ -17,6 +19,20 @@ For using `require` to get modules, I'll just intercept that and define my own o
 - Need to figure out how to use js object prototypes. I want my math object to forward to the js one, so I don't need to define everything (both languages have floor, sin, cos, etc). 
 But maybe it's better to do it manually, so I have a hard error for things I didn't test yet. 
 - Should cleverly only include the parts of my little runtime thingy that are actually used by the program. 
+
+Should have a debug mode that inserts checks like only doing arithmetic on numbers, no undefined argument values, etc. 
+
+There's something wierd with the library I'm using. The last statement in a block isn't in the main Vec of statements. 
+I guess it's a type safety thing because only some statements (jumps) are allowed to be terminators, and they can't appear in the middle of a block. 
+So maybe it's actually reasonable.
+
+I'm using JS iterables for pairs/ipairs. Works for my uses where they're consumed by a for loop. 
+The Lua docs have a more specific paragraph about what they're supposed to return so might have to revisit this later if I ever run into problems. 
+- https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_Generators
+
+Multiple return values can just use JS list destructuring. 
+
+Should think of a less generic name. I'm sure lua2js is already taken. 
 
 ## Random ticks & cleanup (Oct 22)
 
