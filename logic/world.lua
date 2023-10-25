@@ -1,6 +1,6 @@
 local ffi = require("ffi")
 local math = require("math")
-local string = require("string")
+--local string = require("string")
 
 ffi.cdef[[
 typedef unsigned short u16;
@@ -36,7 +36,12 @@ local chunk_size = 16
 function debug_assert(c, msg, ...)
     local arg={...}
     if not c then
-        error(string.format(msg, unpack(arg)))
+        -- TODO: implement format and unpack in my transpiler
+        -- error(string.format(msg, unpack(arg)))
+        for _,v in arg do
+            print(v)
+        end
+        error(msg)
     end
 end
 
@@ -125,7 +130,8 @@ World = {
 -- The # operator is only for array like ones. This is not a great language!
 function table_len(t)
     local count = 0
-    for _,_ in pairs(t) do
+    -- TODO: my transpiler doesn't handle name collision
+    for _,__ in pairs(t) do
         count = count + 1
     end
     return count

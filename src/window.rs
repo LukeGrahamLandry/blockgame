@@ -20,7 +20,7 @@ pub struct Mesh {
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
     pub transform: MeshUniform,
-    pub(crate) _info_buffer: Buffer,  // TODO: will need when I want to reuse them.
+    pub(crate) info_buffer: Buffer,
     pub(crate) info_bind_group: BindGroup,
 }
 

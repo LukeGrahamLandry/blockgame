@@ -1,31 +1,37 @@
-use mlua::{Function, LightUserData, Lua};
-use crate::pos::{BlockPos, Chunk, LocalPos};
-use crate::{gen, State};
-use crate::world::{LogicChunks, SharedObj};
-use std::ffi::c_void;
+use crate::pos::Chunk;
+use crate::State;
+use std::hint::black_box;
 
-pub struct GameLogic {
-    lua: Lua
-}
+#[cfg(not(target_arch = "wasm32"))]
+pub mod lua {
+    use mlua::{Function, LightUserData, Lua};
+    use std::ffi::c_void;
+    use crate::State;
 
-impl GameLogic {
-    pub fn new() -> Self {;
-        let lua = unsafe {
-            Lua::unsafe_new()
-        };
-
-        lua.load(include_str!(concat!(env!("OUT_DIR"), "/gen.lua"))).exec().unwrap();
-        lua.load(include_str!("../logic/world.lua")).exec().unwrap();
-        lua.load(include_str!("../logic/blocks.lua")).exec().unwrap();
-
-        Self { lua }
+    pub struct GameLogic {
+        lua: Lua
     }
-    pub fn run_tick(&self, state: &mut State) {
-        let tick_chunk: Function = self.lua.globals().get("run_tick").unwrap();
-        let _: () = tick_chunk.call(LightUserData(state as *const _ as *mut c_void)).unwrap_or_else(|e| {
-            panic!("{}", e);
-        });
+
+    impl GameLogic {
+        pub fn new() -> Self {;
+            let lua = unsafe {
+                Lua::unsafe_new()
+            };
+
+            lua.load(include_str!(concat!(env!("OUT_DIR"), "/gen.lua"))).exec().unwrap();
+            lua.load(include_str!("../logic/world.lua")).exec().unwrap();
+            lua.load(include_str!("../logic/blocks.lua")).exec().unwrap();
+
+            Self { lua }
+        }
+        pub fn run_tick(&self, state: &mut State) {
+            let tick_chunk: Function = self.lua.globals().get("run_tick").unwrap();
+            let _: () = tick_chunk.call(LightUserData(state as *const _ as *mut c_void)).unwrap_or_else(|e| {
+                panic!("{}", e);
+            });
+        }
     }
+
 }
 
 
@@ -48,5 +54,5 @@ pub fn reference_extern() {
         generate_chunk as _,
         update_mesh as _,
     ];
-
+    black_box(funcs);
 }

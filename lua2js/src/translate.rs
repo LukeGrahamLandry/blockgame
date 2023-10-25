@@ -1,15 +1,17 @@
-use std::fmt::format;
 use full_moon::ast::{Ast, BinOp, Block, Call, Expression, Field, FunctionArgs, FunctionBody, FunctionCall, FunctionName, Index, LastStmt, Prefix, Stmt, Suffix, UnOp, Value, Var};
-use full_moon::tokenizer::TokenKind;
 
 pub fn tojs(ast: &Ast) -> String {
-    let msg = "// This file is @generated from lua. Do not edit manually!";
-    let mut out = format!("{0}\n{1}\n{0}\n", msg, include_str!("runtime.js"));
+    let mut out = "// This file is @generated from lua. Do not edit manually!\n\n".to_string();
     for node in ast.nodes().stmts() {
         out += &*stmt2js(node);
     }
     out
 }
+
+// TODO: make this configurable
+/// Enables explicit runtime type checking.
+/// - Arithmetic is on numbers or coercible strings.
+const SAFE: bool = true;
 
 pub fn block2js(block: &Block) -> String {
     let mut out = "{\n".to_string();
@@ -28,9 +30,7 @@ pub fn block2js(block: &Block) -> String {
                     }
                     _ => {
                         out.push_str("return [");
-                        for val in ret.returns() {
-                            out += &*format!("{}, ", expr2js(val));
-                        }
+                        out += &*comma_join(ret.returns().iter().map(expr2js));
                         out.push_str("];\n")
                     }
                 }
@@ -43,8 +43,9 @@ pub fn block2js(block: &Block) -> String {
     out
 }
 
+const JS_KEYWORDS: [&str; 19] = ["new", "abstract", "arguments", "await", "const", "let", "var", "try", "catch", "null", "typeof", "throw", "delete", "debugger", "class", "instanceof", "finally", "case", "yield"];
+
 fn stmt2js(stmt: &Stmt) -> String {
-    println!("stmt: {:?}", stmt);
     let mut out = String::new();
     match stmt {
         Stmt::Assignment(assign) => {
@@ -55,7 +56,7 @@ fn stmt2js(stmt: &Stmt) -> String {
                 }
             } else {
                 assert_eq!(assign.expressions().len(), 1);  // TODO
-                let names: String = assign.variables().iter().map(|s| var2js(s) + ", ").collect();
+                let names: String = comma_join(assign.variables().iter().map(var2js));
                 let val = expr2js(assign.expressions().iter().next().unwrap());
                 out += &*format!("[{}] = {};\n", names, val);
             }
@@ -70,9 +71,7 @@ fn stmt2js(stmt: &Stmt) -> String {
         },
         Stmt::GenericFor(block) => {
             out.push_str("for (const [");
-            for n in block.names() {
-                out += &*format!("{}, ", n)
-            }
+            out += &* comma_join(block.names().iter());
             out.push_str("] of ");
             assert_eq!(block.expressions().len(), 1);
             out += &*expr2js(block.expressions().iter().next().unwrap());
@@ -102,7 +101,7 @@ fn stmt2js(stmt: &Stmt) -> String {
                 }
             } else {
                 assert_eq!(assign.expressions().len(), 1);  // TODO
-                let names: String = assign.names().iter().map(|s| s.to_string() + ", ").collect();
+                let names: String = comma_join(assign.names().iter().map(ToString::to_string).map(unkeyword));
                 let val = expr2js(assign.expressions().iter().next().unwrap());
                 out += &*format!("let [{}] = {};\n", names, val);
             }
@@ -122,9 +121,8 @@ fn stmt2js(stmt: &Stmt) -> String {
 
 fn func_body(func: &FunctionBody) -> String {
     let mut out = "(".to_string();
-    for arg in func.parameters() {
-        out += &*format!("{}, ", arg);
-    }
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/rest_parameters
+    out += &*comma_join(func.parameters().iter().map(|p| p.to_string()).map(|s| if s == "..." { s + "arguments" } else {s}));
     out.push(')');
     out += &*block2js(func.block());
     out.push('\n');
@@ -132,8 +130,23 @@ fn func_body(func: &FunctionBody) -> String {
     out
 }
 
+// TODO: it would be clever to make this a trait implemented for those iterators so I could called it with postfix syntax.
+fn comma_join(entries: impl Iterator<Item=impl ToString>) -> String {
+    entries.map(|p| p.to_string()).collect::<Vec<String>>().join(", ")
+}
+
 fn func_name(name: &FunctionName) -> String {
-    format!("function {}", name.names())
+    format!("function {}", unkeyword(name.names().to_string()))
+}
+
+// TODO: hash set?
+fn unkeyword(s: String) -> String {
+    let keyword = JS_KEYWORDS.iter().any(|ss| **ss == s);
+    if keyword {
+        s + "__"  // TODO: assumes you didn't name something this, but like why
+    } else {
+        s
+    }
 }
 
 fn expr2js(expr: &Expression) -> String {
@@ -141,6 +154,7 @@ fn expr2js(expr: &Expression) -> String {
         Expression::BinaryOperator { lhs, binop, rhs } => {
             let lhs = expr2js(lhs);
             let rhs = expr2js(rhs);
+            let require_numbers = matches!(binop, BinOp::GreaterThan(_) | BinOp::GreaterThanEqual(_) | BinOp::LessThan(_) | BinOp::LessThanEqual(_) | BinOp::Minus(_) | BinOp::Percent(_) | BinOp::Plus(_) | BinOp::Slash(_) | BinOp::Star(_));
             let op = match binop {
                 BinOp::And(_) => "&&",
                 BinOp::Caret(_) => todo!(),
@@ -162,7 +176,12 @@ fn expr2js(expr: &Expression) -> String {
                 BinOp::TwoEqual(_) => "===",
                 _ => unimplemented!()
             };
-            format!("({} {} {})", lhs, op, rhs)
+            if SAFE && require_numbers {
+                format!("(LuaHelper.require_number({}) {} LuaHelper.require_number({}))", lhs, op, rhs)
+
+            } else {
+                format!("({} {} {})", lhs, op, rhs)
+            }
         },
         Expression::Parentheses { expression, .. } => expr2js(expression),
         Expression::UnaryOperator { unop, expression } => {
@@ -181,15 +200,32 @@ fn expr2js(expr: &Expression) -> String {
 
 fn value2js(value: &Value) -> String {
     match value {
-        Value::Function(_) => todo!(),
+        Value::Function((_, func)) => {
+            format!("function{}",func_body(func))
+        },
         Value::FunctionCall(call) => call2js(call),
         Value::IfExpression(_) => todo!(),
         Value::InterpolatedString(_) => todo!(),
         Value::TableConstructor(table) => {
             let mut out = String::new();
+
+            // TODO: this is a bit deranged.
+            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Functions/rest_parameters
+            if table.fields().len() == 1 {
+                if let Field::NoKey(val) = table.fields().iter().next().unwrap() {
+                    if let Expression::Value { value, .. } = val {
+                        if let Value::Symbol(sym) = value.as_ref() {
+                            if sym.to_string() == "..." {
+                                return "LuaHelper.array_to_table(arguments)".to_string();
+                            }
+                        }
+                    }
+                }
+            }
+
             for field in table.fields() {
                 match field {
-                    Field::ExpressionKey { brackets, key, equal, value } => {
+                    Field::ExpressionKey { key, value, .. } => {
                         out += &*format!("[{}]: {}, ", expr2js(key), expr2js(value));
 
                     },
@@ -216,7 +252,8 @@ fn value2js(value: &Value) -> String {
             } else if sym == "false" {
                 "false".to_string()
             } else if sym == "nil" {
-                "null".to_string()
+                // Not using null because failed table lookups return nil in lua and undefined in js
+                "undefined".to_string()
             } else {
                 panic!("Unknown symbol {}", sym)
             }
@@ -236,8 +273,14 @@ fn call2js(call: &FunctionCall) -> String {
         func = "LuaHelper.ipairs".to_string();
     } else if func == "pairs" {
         func = "LuaHelper.pairs".to_string();
+    } else if func == "setmetatable" {
+        func = "LuaHelper.setmetatable".to_string();
+    } else if func == "error" {
+        func = "throw".to_string();
+    } else {
+        func = unkeyword(func);
     }
-    call.suffixes().enumerate().for_each(|(i, s)| println!("call suffix {}: {:?}", i, s));
+
     for suffix in call.suffixes() {
         func = apply_suffix(func, suffix);
     }
@@ -245,35 +288,40 @@ fn call2js(call: &FunctionCall) -> String {
 }
 
 fn apply_suffix(expr: String, suffix: &Suffix) -> String {
-    let mut out = String::new();
     match suffix {
         Suffix::Call(call) => {
             match call {
                 Call::AnonymousCall(args) => {
-                    match args {
-                        FunctionArgs::Parentheses { arguments, .. } => {
-                            for arg in arguments.iter() {
-                                out += &*format!("{}, ", expr2js(arg));
-                            }
-                            format!("{}({})", expr, out)
-                        }
-                        FunctionArgs::String(_) => todo!(),
-                        FunctionArgs::TableConstructor(_) => todo!(),
-                        _ => unimplemented!()
-                    }
+                    format!("{}({})", expr, args2js(args))
                 }
-                Call::MethodCall(_) => todo!(),
+                // TODO: this evaluates the receiver expression twice which is wrong. Can't just use the this keyword like js because lua has being a method as a property of the call not the function definition.
+                // TODO: also a trailing comma if method has no extra arguments which is fine but imperfect
+                Call::MethodCall(method) => format!("LuaHelper.method_call({0}, \"{1}\", {2})", expr, method.name(), args2js(method.args())),
                 _ => unimplemented!()
             }
         }
         Suffix::Index(index) => {
-            println!("index: {:?}", index);
             match index {
                 Index::Brackets { expression, .. } => format!("{}[{}]", expr, expr2js(expression)),
                 Index::Dot { name, .. } => format!("{}.{}", expr, name),
                 _ => unimplemented!()
             }
         },
+        _ => unimplemented!()
+    }
+}
+
+fn args2js(args: &FunctionArgs) -> String {
+    match args {
+        FunctionArgs::Parentheses { arguments, .. } => {
+            comma_join(arguments.iter().map(expr2js))
+        }
+        FunctionArgs::String(s) => {
+            // I recognise this doesn't matter and you can still run arbitrary code, there's no inner sandbox here and its only me on my own website anyway but still, out of principle.
+            assert!(!s.to_string().contains("${"), "XSS this asshole. https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals \n{:?}", s);
+            format!("`{}`", s.to_string().trim().strip_prefix("[[\n").unwrap().strip_suffix("]]").unwrap())
+        },
+        FunctionArgs::TableConstructor(_) => todo!(),
         _ => unimplemented!()
     }
 }
@@ -288,7 +336,7 @@ fn var2js(var: &Var) -> String {
             out
         }
         Var::Name(name) => {
-            name.token().to_string()
+            unkeyword(name.token().to_string())
         }
         _ => unimplemented!()
     }
@@ -299,7 +347,7 @@ fn prefix2js(pref: &Prefix) -> String {
             expr2js(expr)
         }
         Prefix::Name(name) => {
-            name.token().to_string()
+            unkeyword(name.token().to_string())
         }
         _ => unimplemented!()
     }

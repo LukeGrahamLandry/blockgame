@@ -8,7 +8,6 @@ pub mod pos;
 
 use std::mem::size_of;
 use std::rc::Rc;
-use mlua::{Function, LightUserData, Lua};
 use wgpu::RenderPipeline;
 use winit::event::{DeviceEvent, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event::ElementState::Pressed;
@@ -22,7 +21,7 @@ use common::pos::Tile;
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
-use crate::lua_api::GameLogic;
+use crate::lua_api::lua::GameLogic;
 use crate::world::LogicChunks;
 
 #[cfg(target_arch="wasm32")]

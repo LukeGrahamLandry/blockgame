@@ -150,7 +150,7 @@ impl ChunkList {
         };
 
         // Never need to resize, info length is fixed.
-        self.ctx.write_buffer(&mesh._info_buffer, ref_to_bytes(&transform));
+        self.ctx.write_buffer(&mesh.info_buffer, ref_to_bytes(&transform));
 
         mesh.num_elements = indi.len() as u32;
     }
@@ -182,7 +182,7 @@ impl ChunkList {
             index_buffer,
             num_elements: indi.len() as u32,
             transform,
-            _info_buffer: info_buffer,
+            info_buffer: info_buffer,
             info_bind_group,
         }
     }

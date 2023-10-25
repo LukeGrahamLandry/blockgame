@@ -56,6 +56,34 @@ const LuaHelper = (() => {
         array_len: array_len,
         ipairs: ipairs,
         pairs: pairs,
+        setmetatable: (obj, meta) => {
+            // TODO: support more powerful metatable stuff.
+            if (typeof meta.__index !== "object") throw "meta.__index must be object";
+            if (Object.keys(meta).length !== 1) throw "metatable may only define __index";
+            obj.__proto__ = meta.__index   // TODO: this is probably not right!
+        },
+        // This sucks but is only used for variadic functions.
+        // JS gives the additional arguments as an array but lua wants to call ipairs on it.
+        // TODO: use real js arrays for lua array-like tables and this goes away.
+        array_to_table: (arr) => {
+            let table = {};
+            for (const [i, v] of arr.entries()) {
+                table[i + 1] = v;
+            }
+            return table;
+        },
+        require_number: (a) => {
+            if (typeof a == "number" || (typeof a == "string" && !isNaN(Number(a)))) return a;
+            else throw "Expected number (or coercible string) but found " + a;
+        },
+        require_defined: (a) => {
+            if (a !== undefined) return a;
+            else throw "Argument not defined";
+        },
+        // This is unfortunate. Need an expression to call a method and pass self as the first argument but not evaluate the object expression twice (because it might be a method call).
+        // Can't use `this` inside the method because lua lets you call as normal function or method depending on the call-site.
+        // TODO: the compiler could notice when the expression can't have side effects and emit the normal syntax if it's absolutely sure.
+        method_call: (receiver, method_name, ...args) => receiver[method_name].apply(null, [receiver, ...args]),
         modules: {
             math: {
                 floor: Math.floor,

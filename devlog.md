@@ -6,7 +6,7 @@ A few options to consider
 - Find a lua vm that will run in wasm. But couldn't find one that lets you do ffi as seamlessly as luajit. Also, it seems sad to bring my own shitty interpreter that can't even jit when V8 is just sitting there. 
 - Write the thing in js instead and find a little js vm for native. Seems unlikely to find a tiny jit that also lets you call c functions without writing boilerplate. 
 Even in the browser, js can't seamlessly access fields of wasm structs.
-- Transpile lua to JS! More work but means more control over the output. Feels like I could get the ffi stuff to work if I find a c parser, and maybe use a typed dialect of lua, so I get more information. 
+- Transpile lua to JS! More work but means more control over the output. Feels like I could get the ffi stuff to work if I find a c parser, and maybe use a typed dialect of lua, so I get more information.
 
 Start with the simple thing for math. 
 - It gets a bit wierd when they don't define things (like mod for negative numbers) the same, so I have to call a little function. 
@@ -18,9 +18,7 @@ For using `require` to get modules, I'll just intercept that and define my own o
 - Why doesn't `{ ...Math, pi: Math.PI }` work? Is Math not a real object somehow>? Manually assigning individual fields works. 
 - Need to figure out how to use js object prototypes. I want my math object to forward to the js one, so I don't need to define everything (both languages have floor, sin, cos, etc). 
 But maybe it's better to do it manually, so I have a hard error for things I didn't test yet. 
-- Should cleverly only include the parts of my little runtime thingy that are actually used by the program. 
-
-Should have a debug mode that inserts checks like only doing arithmetic on numbers, no undefined argument values, etc. 
+- Should cleverly only include the parts of my little runtime thingy that are actually used by the program.
 
 There's something wierd with the library I'm using. The last statement in a block isn't in the main Vec of statements. 
 I guess it's a type safety thing because only some statements (jumps) are allowed to be terminators, and they can't appear in the middle of a block. 
@@ -32,7 +30,40 @@ The Lua docs have a more specific paragraph about what they're supposed to retur
 
 Multiple return values can just use JS list destructuring. 
 
+Have a simple debug mode that inserts checks like only doing arithmetic on numbers, no undefined argument values, etc.
+Makes the generated code ugly and want to have a way to toggle this off for release builds eventually.
+Also need to expand it so comparisons (>, >=, <=, <) are checked for coercion because lua won't auto convert strings to numbers (even though it does for normal math). 
+
+Currently, it enforces that all arguments are used when calling functions. Both languages allow optional arguments but lua sets them to nil (which I'm representing as null) and js sets them to undefined. 
+But maybe I just need to use undefined for nil instead because failed object lookups are supposed to return nil in lua. 
+Actually yeah, I made that change. Now I can't check that you pass the right number of arguments since passing nil and nothing look the same. 
+The code for that in rust looked ugly anyway tho so not a total loss. 
+Should add proper arity checking once I'm looking at type info. 
+
 Should think of a less generic name. I'm sure lua2js is already taken. 
+
+Implementing a tiny part of metatables by using the `__index` field as the object's prototype (so that only supports a table, not any function like real lua). 
+No other operator overloading stuff yet. I'd have to do that in the compiler since JS doesn't have operator overloading. Something like every binary operator instead calls 
+`LuaHelper.add` or whatever and looks up what to do in the meta table. I think I'd want to wait until I'm doing stuff with type hints so numbers could still compile to raw JS ops. 
+- https://gist.github.com/oatmealine/655c9e64599d0f0dd47687c1186de99f
+
+Have to check that they don't use js keywords as variable names. And by "they" I mean me because I did exactly that with my `new` function for making a new table with a certain metatable. 
+
+JS has variadic functions very similar to lua, just need to do a cringe rearranging of the array to make it a one indexed table. 
+
+Method calls are weird because lua lets you decide at the call-site instead of at the function declaration. 
+So I can't just use JS `this` inside the function because any function in a table can be called both ways. 
+Can't just naively `a:name(b, c)` -> `a.name(a, b, c)` because that would evaluate the receiver expression twice, and it might have side effects. 
+And I can't just put the object in a variable because I need method calls to be an expression. 
+So for now I have a helper method you call like `call(a, "name", b, c)` that then calls the method with the variadic args as an array `receiver[method_name].apply(null, [receiver, ...args])`. 
+Which is annoying because it doesn't look normal and its probably 0.01% harder to jit but eh, it works. 
+
+Multiline strings (`[[ whatever ]]`) are interesting because its natural to u se backticks for them but that allows you to easily escape to js expression land (`${alert("xss lol")}`). 
+Suppose really that just revealed how trivial it is for the rest of the code too since I'm mostly doing text based substitutions. 
+You could just call eval without defining it first and bam, you referred to the js one. 
+Admittedly that's not a meaningful threat model for this project, but fun food for thought anyway. 
+
+So I think that's all the features of lua I'm using so far, took ~a day, but now I'm ready to tackle ffi. 
 
 ## Random ticks & cleanup (Oct 22)
 
@@ -118,7 +149,7 @@ I want it to run in the browser as well.
 
 Problem: the colours are much darker in the web version. Idk what's up with that. 
 
-I also dislike that I can't run wasm-bindgen from a cargo build script so now I have an ugly shell thing for the web version. 
+I also dislike that I can't run wasm-bindgen from a cargo build script, so now I have an ugly shell thing for the web version. 
 
 ## Code generation for fun and profit (Oct 21)
 
