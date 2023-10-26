@@ -41,6 +41,9 @@ const LuaHelper = (() => {
     function pairs(arr){
         return {*[Symbol.iterator]() {
             for (const k of Object.keys(arr)) {
+                if (arr[k] === undefined) {  // TODO: make sure this is right. I think lua assigning to nil is how you delete
+                    continue
+                }
                 yield [k, arr[k]];
             }
         }};
@@ -94,6 +97,7 @@ const LuaHelper = (() => {
                 max: Math.max,
                 min: Math.min,
                 pow: Math.pow,
+                abs: Math.abs,
                 pi: Math.PI,
                 random: random,
             }

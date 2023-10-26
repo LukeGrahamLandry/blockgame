@@ -68,12 +68,11 @@ impl LogicChunks {
 
 pub fn generate(chunk: &mut Chunk) {
     if chunk.pos.y < 0 {
-        // println!("generate {:?}", chunk.pos);
         let mut n = random_numbers((chunk.pos.x + chunk.pos.y + chunk.pos.z).unsigned_abs());
-        let block = (n.next().unwrap() as usize % gen::tiles::SOLID_COUNT) + 1;
-        debug_assert!(!Tile::new(block, true).empty());
+        let normal = [gen::tiles::stone, gen::tiles::dirt, gen::tiles::grass, gen::tiles::log, gen::tiles::leaf];
+        let block = (n.next().unwrap() as usize % normal.len());
         for pos in chunk.tiles.iter_mut() {
-            *pos = Tile::new(block, true);
+            *pos = normal[block];
         }
     }
 }

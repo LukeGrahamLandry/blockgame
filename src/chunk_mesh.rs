@@ -13,7 +13,7 @@ pub struct ChunkList {
     chunks: HashMap<ChunkPos, Mesh>,
     layout: BindGroupLayout,
     ctx: Rc<WindowContext>,
-    builder: MeshBuilder,
+    pub builder: MeshBuilder,
 
     // Old meshes not currently in use. When loading a new chunk, check if there's one here,
     // since I assume it's cheaper to update a buffer than create a new one.
@@ -50,10 +50,7 @@ impl ChunkList {
             if player.axis_distance(pos) > 5 {
                 continue;
             }
-            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            render_pass.set_bind_group(1, &mesh.info_bind_group, &[]);
-            render_pass.draw_indexed(0..mesh.num_elements, 0, 0..1);
+            mesh.render(render_pass);
         }
     }
 
@@ -70,7 +67,7 @@ impl ChunkList {
         self.recycle(old);
     }
 
-    fn recycle(&mut self, mesh: Option<Mesh>) {
+    pub fn recycle(&mut self, mesh: Option<Mesh>) {
         if let Some(old) = mesh {
             if self.mesh_pool.len() < Self::MAX_ALLOC_POOL {
                 self.mesh_pool.push(old);
@@ -172,7 +169,8 @@ impl ChunkList {
         mesh.num_elements = indi.len() as u32;
     }
 
-    fn init_mesh(&self, vert: &[ModelVertex], indi: &[u32], transform: Mat4) -> Mesh {
+    // TODO: move this method since entity wants it too
+    pub fn init_mesh(&self, vert: &[ModelVertex], indi: &[u32], transform: Mat4) -> Mesh {
         #[cfg(feature = "profiling")]
         self.init_count.set(self.init_count.get() + 1);
 
@@ -210,17 +208,17 @@ impl ChunkList {
 
 pub struct MeshBuilder {
     atlas: Rc<TextureAtlas>,
-    vert: Vec<ModelVertex>,
-    indi: Vec<u32>,
+    pub vert: Vec<ModelVertex>,
+    pub indi: Vec<u32>,
 }
 
 impl MeshBuilder {
-    fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.vert.clear();
         self.indi.clear();
     }
 
-    fn add_cube(&mut self, tile: Tile, pos: Vec3, top: bool, bottom: bool, left: bool, right: bool, close: bool, far: bool) {
+    pub fn add_cube(&mut self, tile: Tile, pos: Vec3, top: bool, bottom: bool, left: bool, right: bool, close: bool, far: bool) {
         debug_assert!(tile.solid());
         let down_close_left = [0.0, 0.0, 0.0];
         let down_close_right = [0.0, 0.0, 1.0];

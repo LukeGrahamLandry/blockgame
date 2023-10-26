@@ -5,6 +5,7 @@ pub mod gen;
 pub mod lua_api;
 pub mod pos;
 mod worldgen;
+mod entity_render;
 
 use std::mem::size_of;
 use std::rc::Rc;
@@ -22,6 +23,7 @@ use common::pos::Tile;
 
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
+use crate::entity_render::EntityRender;
 use crate::lua_api::lua::GameLogic;
 use crate::worldgen::LogicChunks;
 
@@ -44,7 +46,8 @@ pub struct State {
     atlas: Rc<TextureAtlas>,
     cursor_lock: bool,
     world: LogicChunks,
-    logic: &'static GameLogic
+    logic: &'static GameLogic,
+    entities: EntityRender
 }
 
 
@@ -83,6 +86,7 @@ impl App for State {
         let logic = Box::new(GameLogic::new());
 
         State {
+            entities: EntityRender::new(ctx.clone()),
             ctx,
             depth_texture,
             camera,
@@ -153,6 +157,7 @@ impl App for State {
             render_pass.set_bind_group(0, &self.camera.camera_bind_group, &[]);
             render_pass.set_bind_group(2, &self.atlas.bind_group, &[]);
             self.chunks.render(&mut render_pass, BlockPos::vec(self.camera.camera.pos).chunk());
+            self.entities.render(&mut render_pass);
 
         };
 

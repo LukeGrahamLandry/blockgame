@@ -24,6 +24,16 @@ pub struct Mesh {
     pub(crate) info_bind_group: BindGroup,
 }
 
+impl Mesh {
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_bind_group(1, &self.info_bind_group, &[]);
+        render_pass.draw_indexed(0..self.num_elements, 0, 0..1);
+    }
+}
+
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct MeshUniform {

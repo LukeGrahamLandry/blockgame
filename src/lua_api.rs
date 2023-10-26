@@ -1,12 +1,15 @@
 use crate::pos::{BlockPos, Chunk, ChunkPos};
-use crate::State;
+use crate::{gen, State};
 use std::hint::black_box;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use common::pos::Tile;
 use std::alloc::{GlobalAlloc, Layout};
 use std::ptr;
+use glam::{Mat4, Vec3};
 use crate::worldgen::generate;
 use instant::Duration;
+use crate::entity_render::EntityInfo;
+use crate::window::{App, ref_to_bytes};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod lua {
@@ -164,6 +167,38 @@ pub extern "C" fn chunk_get_block(chunk: &mut Chunk, index: u32) -> u32 {
     chunk.tiles[index as usize].0 as u32
 }
 
+#[no_mangle]
+pub extern "C" fn render_entity(state: &mut State, id: i32, ty: i32, x: f32, y: f32, z: f32) {
+    state.entities.update(id, |ctx, info| {
+        match ty {
+            1 => {  // FallingBlock
+                let transform =  Mat4::from_translation(Vec3::new(x, y, z));
+                match info {
+                    EntityInfo::None => {
+                        let builder = &mut state.chunks.builder;
+                        builder.clear();
+                        builder.add_cube(gen::tiles::stone, Vec3::new(0f32, 0f32, 0f32), true, true, true, true, true, true);
+                        let builder = &state.chunks.builder;
+                        let mesh = state.chunks.init_mesh(&builder.vert, &builder.indi, transform);
+                        *info = EntityInfo::SingleMesh(mesh);
+                    }
+                    EntityInfo::SingleMesh(mesh) => {
+                        mesh.transform.transform = transform.to_cols_array_2d();
+                        ctx.write_buffer(&mesh.info_buffer, ref_to_bytes(&mesh.transform));
+                    }
+                }
+            }
+            _ => debug_assert!(false, "Invalid entity type {}, id={}", ty, id),
+        }
+    });
+}
+
+
+#[no_mangle]
+pub extern "C" fn forget_entity(state: &mut State, id: i32) {
+    state.entities.remove(&mut state.chunks, id);
+}
+
 pub fn reference_extern() {
     let funcs: &[*const extern "C" fn()] = &[
         get_chunk as _,
@@ -174,7 +209,9 @@ pub fn reference_extern() {
         lua_drop as _,
         lua_alloc as _,
         random_chunk as _,
-        gc_chunks as _
+        gc_chunks as _,
+        render_entity as _,
+        forget_entity as _,
     ];
     black_box(funcs);
 }

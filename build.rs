@@ -11,10 +11,12 @@ fn main() {
     // TODO: super dumb to need to manually list files here.
     println!("cargo:rerun-if-changed=logic/src/world.lua");
     println!("cargo:rerun-if-changed=logic/src/blocks.lua");
+    println!("cargo:rerun-if-changed=logic/src/entities.lua");
     compile_lua(&[
         &*lua_src,
         include_str!("logic/world.lua"),
         include_str!("logic/blocks.lua"),
+        include_str!("logic/entities.lua"),
     ]);
 }
 

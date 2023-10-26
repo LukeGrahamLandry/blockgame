@@ -24,8 +24,8 @@ void unload_chunk(void* state, int x, int y, int z);
 void lua_drop(void* ptr);
 Chunk* random_chunk(void* state);
 void gc_chunks(void* state, int x, int y, int z);
-
-
+void render_entity(void* state, int id, int ty, float x, float y, float z);
+void forget_entity(void* state, int id);
 ]]
 
 function new<T>(cls: T): T
@@ -72,6 +72,7 @@ type Chunk = {
 
 World = {
     any_chunk_dirty = false,
+    entities = {},
 
     -- x,y,z are ChunkPos
     get_chunk = function(self, x: number, y: number, z: number): Chunk
@@ -128,6 +129,15 @@ World = {
             end
         end
     end,
+
+    add_entity = function(self, entity)
+        self.entities[entity.id] = entity
+    end,
+
+    remove_entity = function(self, entity)
+        self.entities[entity.id] = nil
+        ffi.C.forget_entity(rust_state, entity.id)
+    end,
 }
 
 -- The # operator is only for array like ones. This is not a great language!
@@ -147,7 +157,7 @@ function block_to_chunk_pos(bx, by, bz)
 end
 
 function block_to_local_pos(bx, by, bz)
-    return bx % chunk_size, by % chunk_size, bz % chunk_size
+    return math.abs(math.floor(bx)) % chunk_size, math.abs(math.floor(by)) % chunk_size, math.abs(math.floor(bz)) % chunk_size
 end
 
 function local_to_index(lx, ly, lz)
@@ -208,6 +218,7 @@ end
 
 local extra_time = 0
 local tick_interval_secs = 1/20
+local spawn_x = 0
 
 function run_tick(state, player_bx, player_by, player_bz, dt_sec)
     rust_state = state
@@ -227,6 +238,17 @@ function run_tick(state, player_bx, player_by, player_bz, dt_sec)
     if do_tick then
         local chunk = ffi.C.random_chunk(rust_state)
         the_world:do_random_ticks(chunk)
+    end
+
+    if math.random() < 0.05 then
+        the_world:add_entity(new(FallingBlock.init(the_world, spawn_x, 15, 0, gen.tiles.stone)))
+        if math.random() < 0.3 then
+            spawn_x = spawn_x + 1
+        end
+    end
+
+    for id,entity in pairs(the_world.entities) do
+        entity:tick()
     end
 
     -- TODO: rust could check the flags on all chunks in render distance every frame, is that better?
