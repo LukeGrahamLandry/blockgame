@@ -1,4 +1,4 @@
-use crate::pos::Chunk;
+use crate::pos::{BlockPos, Chunk, ChunkPos};
 use crate::State;
 use std::hint::black_box;
 use std::sync::atomic::{AtomicIsize, Ordering};
@@ -6,11 +6,13 @@ use common::pos::Tile;
 use std::alloc::{GlobalAlloc, Layout};
 use std::ptr;
 use crate::worldgen::generate;
+use instant::Duration;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod lua {
     use mlua::{Function, LightUserData, Lua};
     use std::ffi::c_void;
+    use std::time::Duration;
     use crate::State;
 
     pub struct GameLogic {
@@ -27,10 +29,10 @@ pub mod lua {
 
             Self { lua }
         }
-        pub fn run_tick(&self, state: &mut State) {
+        pub fn run_tick(&self, state: &mut State, dt: Duration) {
             let tick_chunk: Function = self.lua.globals().get("run_tick").unwrap();
             let pos = state.camera.camera.pos;
-            let _: () = tick_chunk.call((LightUserData(state as *const _ as *mut c_void), pos.x, pos.y, pos.z)).unwrap_or_else(|e| {
+            let _: () = tick_chunk.call((LightUserData(state as *const _ as *mut c_void), pos.x, pos.y, pos.z, dt.as_secs_f32())).unwrap_or_else(|e| {
                 panic!("{}", e);
             });
         }
@@ -42,6 +44,7 @@ pub mod lua {
     use std::ffi::c_void;
     use crate::State;
     use wasm_bindgen::prelude::*;
+    use instant::Duration;
 
     pub struct GameLogic {}
 
@@ -50,15 +53,15 @@ pub mod lua {
             Self {}
         }
 
-        pub fn run_tick(&self, state: &mut State) {
+        pub fn run_tick(&self, state: &mut State, dt: Duration) {
             let pos = state.camera.camera.pos;
-            run_tick(state, pos.x, pos.y, pos.z);
+            run_tick(state, pos.x, pos.y, pos.z, dt.as_secs_f32());
         }
     }
 
     #[wasm_bindgen]
     extern "C" {
-        fn run_tick(state: *mut State, playerx: f32, playery: f32, playerz: f32);
+        fn run_tick(state: *mut State, playerx: f32, playery: f32, playerz: f32, dt_sec: f32);
     }
 }
 
@@ -114,26 +117,31 @@ pub unsafe extern "C" fn lua_drop(ptr: *mut u8) {
 }
 
 #[no_mangle]
-pub extern "C" fn unload_chunk(state: &mut State, chunk: &mut Chunk) {
-    state.chunks.remove(chunk.pos);
+pub extern "C" fn random_chunk(state: &mut State) -> *mut Chunk {
+    state.world.get_rand()
 }
 
 #[no_mangle]
-pub extern "C" fn generate_chunk(state: &mut State, chunk: &mut Chunk, x: i32, y: i32, z: i32) {
-    chunk.pos.x = x;
-    chunk.pos.y = y;
-    chunk.pos.z = z;
-    // *chunk = state.world.get_or_gen(chunk.pos).clone();
-    generate(chunk);
-    chunk.dirty.set(true);
+pub extern "C" fn unload_chunk(state: &mut State, x: i32, y: i32, z: i32) {
+    let pos = ChunkPos::new(x, y, z);
+    state.chunks.remove(pos);
+    state.world.chunks.remove(&pos);
 }
 
 #[no_mangle]
-pub extern "C" fn update_mesh(state: &mut State, chunk: &mut Chunk) {
-    if chunk.dirty.get() {
-        state.chunks.update_mesh(chunk.pos, chunk);
-        chunk.dirty.set(false);
-    }
+pub extern "C" fn get_chunk(state: &mut State, x: i32, y: i32, z: i32) -> *mut Chunk {
+    let pos = ChunkPos::new(x, y, z);
+    state.world.get_or_gen(pos, &mut state.chunks)
+}
+
+#[no_mangle]
+pub extern "C" fn update_mesh(state: &mut State) {
+    state.world.update_meshes(&mut state.chunks);
+}
+
+#[no_mangle]
+pub extern "C" fn gc_chunks(state: &mut State, x: i32, y: i32, z: i32) {
+    state.world.gc(BlockPos::new(x, y, z), &mut state.chunks);
 }
 
 // TODO: fix my lua transpiler so i can access fields and not write this stupid boilerplate.
@@ -158,13 +166,15 @@ pub extern "C" fn chunk_get_block(chunk: &mut Chunk, index: u32) -> u32 {
 
 pub fn reference_extern() {
     let funcs: &[*const extern "C" fn()] = &[
-        generate_chunk as _,
+        get_chunk as _,
         update_mesh as _,
         chunk_set_block as _,
         chunk_get_block as _,
         unload_chunk as _,
         lua_drop as _,
         lua_alloc as _,
+        random_chunk as _,
+        gc_chunks as _
     ];
     black_box(funcs);
 }

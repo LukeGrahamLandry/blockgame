@@ -10,3 +10,7 @@ end
 add_growth(gen.tiles.wheat1, gen.tiles.wheat2, 20)
 add_growth(gen.tiles.wheat2, gen.tiles.wheat3, 20)
 add_growth(gen.tiles.wheat3, gen.tiles.wheat, 20)
+
+add_growth(gen.tiles.wheat1_solid, gen.tiles.wheat2_solid, 20)
+add_growth(gen.tiles.wheat2_solid, gen.tiles.wheat3_solid, 20)
+add_growth(gen.tiles.wheat3_solid, gen.tiles.wheat_solid, 20)

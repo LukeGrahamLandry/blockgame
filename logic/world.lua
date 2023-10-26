@@ -16,12 +16,15 @@ typedef struct Chunk {
     char dirty;  // TODO: seesea doesn't know bool yet
 } Chunk;
 
-void generate_chunk(void* state, Chunk* chunk, int x, int y, int z);
-void update_mesh(void* state, Chunk* chunk);
+Chunk* get_chunk(void* state, int x, int y, int z);
+void update_mesh(void* state);
 int chunk_get_block(Chunk* chunk, int index);
 int chunk_set_block(Chunk* chunk, int index, int tile);
-void unload_chunk(void* state, Chunk* chunk);
+void unload_chunk(void* state, int x, int y, int z);
 void lua_drop(void* ptr);
+Chunk* random_chunk(void* state);
+void gc_chunks(void* state, int x, int y, int z);
+
 
 ]]
 
@@ -33,7 +36,7 @@ end
 
 local random_tick_delay_sec = 0.1  -- each chunk should tick once every x seconds
 local blocks_per_random_tick = 4000  -- each time a chunk gets ticked, x blocks will get ticked
-local ticks_per_sec = 60
+local ticks_per_sec = 20
 local chunk_size = 16
 
 -- Calls to this function are magically removed when transpiling to JS if not in SAFE mode. (TODO: do that in type stripping for native as well)
@@ -54,6 +57,11 @@ end
 local block_random_tick_handlers: { [number]: (World, Chunk, number, number, number) -> () } = {}
 --local gen: { tiles: { [string]: number} } = gen
 
+local load_radius = 5
+local unload_radius = 8
+local prev_chunk = nil  -- never read through this! it might have been dropped. just compare the pointer. that's also wrong if it decided to reuse but unlikely 
+local ticks_in_chunk = 0
+
 type Chunk = {
     tiles: { [number]: { v: number } },
     dirty: boolean,
@@ -63,30 +71,15 @@ type Chunk = {
 }
 
 World = {
-    chunks = {} :: { [string]: Chunk },
     any_chunk_dirty = false,
 
     -- x,y,z are ChunkPos
     get_chunk = function(self, x: number, y: number, z: number): Chunk
-        local key = x .. ":" .. y .. ":" .. z
-        local chunk: Chunk = self.chunks[key]
-        if chunk == nil then
-            chunk = ffi.new("Chunk")
-            ffi.C.generate_chunk(rust_state, chunk, x, y, z)
-            self.any_chunk_dirty = true
-            self.chunks[key] = chunk
-        end
-        return chunk
+        return ffi.C.get_chunk(rust_state, x, y, z)
     end,
 
     unload_chunk = function(self, cx: number, cy: number, cz: number)
-        local key = cx .. ":" .. cy .. ":" .. cz
-        local chunk = self.chunks[key]
-        if chunk ~= nil then
-            ffi.C.unload_chunk(rust_state, chunk)
-            ffi.C.lua_drop(chunk)
-            self.chunks[key] = nil
-        end
+        ffi.C.unload_chunk(rust_state, cx, cy, cz)
     end,
 
     -- x,y,z are BlockPos. tile must be a constant from the gen.tiles
@@ -124,26 +117,6 @@ World = {
         local index = local_to_index(lx, ly, lz)
         --return chunk.tiles[index].v
         return ffi.C.chunk_get_block(chunk, index)
-    end,
-
-    -- Indexes are undefined and inconsistent. Only useful for choosing a random chunk
-    --- @param i number
-    get_chunk_index = function(self, i): Chunk
-        -- TODO: this is kinda dumb
-        local count = 0
-        for _, chunk in pairs(self.chunks) do
-            count = count + 1
-            if count == i then
-                return chunk
-            end
-        end
-        debug_assert(false, "get_chunk_index %d out of bounds", i)
-        error("unreachable")
-    end,
-
-    -- TODO: track separately since I know when a chunk is added
-    chunk_count = function(self)
-       return table_len(self.chunks)
     end,
 
     do_random_ticks = function(self, chunk: Chunk)
@@ -186,11 +159,6 @@ type World = typeof(World)
 
 the_world = new(World)
 
-local load_radius = 5
-local unload_radius = 8
-local prev_chunk = nil
-local ticks_in_chunk = 0
-
 function load_around_player(player_bx, player_by, player_bz) 
     local cx, cy, cz = block_to_chunk_pos(player_bx, player_by, player_bz)
     local current_chunk = the_world:get_chunk(cx, cy, cz)
@@ -204,12 +172,14 @@ function load_around_player(player_bx, player_by, player_bz)
             end
         end
         prev_chunk = current_chunk
+        return true
     elseif ticks_in_chunk < load_radius then
         ticks_in_chunk = ticks_in_chunk + 1 
         load_square(cx, cy + ticks_in_chunk, cz, load_radius)
         load_square(cx, cy - ticks_in_chunk, cz, load_radius)
         unload_square(cx, cy + ticks_in_chunk, cz, unload_radius)
         unload_square(cx, cy - ticks_in_chunk, cz, unload_radius)
+        return false
     end
 end
 
@@ -236,29 +206,39 @@ function unload_square(cx, cy, cz, rad)
     end
 end
 
-function run_tick(state, player_bx, player_by, player_bz)
+local extra_time = 0
+local tick_interval_secs = 1/20
+
+function run_tick(state, player_bx, player_by, player_bz, dt_sec)
     rust_state = state
 
-    load_around_player(player_bx, player_by, player_bz)
+    extra_time = math.min(extra_time + dt_sec, 1)
+    if extra_time < tick_interval_secs then
+        return
+    end
+    extra_time = extra_time - tick_interval_secs
+
+    local changed_chunks = load_around_player(player_bx, player_by, player_bz)
     
-    local count = the_world:chunk_count()
-    if count > 0 then
-        -- Each chunk ticks every x so one of n chunks ticks every x/n
-        local adjusted_tick_rate = (random_tick_delay_sec * ticks_per_sec) / count
-        local do_tick = math.random(adjusted_tick_rate) == 1
-        if do_tick then
-            local chunk = the_world:get_chunk_index(math.random(count))
-            the_world:do_random_ticks(chunk)
-        end
+    -- Each chunk ticks every x so one of n chunks ticks every x/n
+    local count = load_radius*load_radius*load_radius
+    local adjusted_tick_rate = (random_tick_delay_sec * ticks_per_sec) / count
+    local do_tick = math.random(adjusted_tick_rate) == 1
+    if do_tick then
+        local chunk = ffi.C.random_chunk(rust_state)
+        the_world:do_random_ticks(chunk)
     end
 
     -- TODO: rust could check the flags on all chunks in render distance every frame, is that better?
     -- If any changes were made this tick,
     if the_world.any_chunk_dirty then
         the_world.any_chunk_dirty = false
-        for key, chunk in pairs(the_world.chunks) do
-            ffi.C.update_mesh(rust_state, chunk)
-        end
+        ffi.C.update_mesh(rust_state)
+    end
+
+    -- You can never hold a chunk pointer accross this point because rust might decide to drop it!
+    if changed_chunks and math.random() < 0.05 then
+        ffi.C.gc_chunks(rust_state, player_bx, player_by, player_bz)
     end
 end
 

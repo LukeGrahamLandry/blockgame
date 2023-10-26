@@ -18,9 +18,8 @@ pub struct ChunkList {
     // Old meshes not currently in use. When loading a new chunk, check if there's one here,
     // since I assume it's cheaper to update a buffer than create a new one.
     mesh_pool: Vec<Mesh>,
+    #[cfg(feature = "profiling")]
     init_count: Cell<usize>,
-    resize_count: Cell<usize>,
-    reuse_count: Cell<usize>
 }
 
 impl ChunkList {
@@ -35,9 +34,8 @@ impl ChunkList {
                 indi: Vec::with_capacity(10000),
             },
             mesh_pool: Vec::with_capacity(Self::MAX_ALLOC_POOL),
+            #[cfg(feature = "profiling")]
             init_count: Cell::new(0),
-            resize_count: Cell::new(0),
-            reuse_count: Cell::new(0),
         }
     }
 
@@ -46,9 +44,12 @@ impl ChunkList {
         self.recycle(old);
     }
 
-    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
+    pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>, player: ChunkPos) {
         // TODO: easy culling based on ChunkPos and camera direction.
-        for mesh in self.chunks.values() {
+        for (pos, mesh) in self.chunks.iter() {
+            if player.axis_distance(pos) > 5 {
+                continue;
+            }
             render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
             render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.set_bind_group(1, &mesh.info_bind_group, &[]);
@@ -57,32 +58,29 @@ impl ChunkList {
     }
 
     const CHUNK_SCALE: f32 = CHUNK_SIZE as f32;
-    const MAX_ALLOC_POOL: usize = 200;  // TODO: need to set this dynamically based on render distance.
+    const MAX_ALLOC_POOL: usize = 1500;  // TODO: need to set this dynamically based on render distance.
 
     pub fn update_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) {
         // println!("Meshes: {} + {}", self.chunks.len(), self.mesh_pool.len());
-        if self.reuse_count.get() % 500 == 0 {
-            println!("init: {}, resize: {}, use: {}", self.init_count.get(), self.resize_count.get(), self.reuse_count.get())
-        }
-        if chunk.is_empty() {
-            let old = self.chunks.remove(&pos);
-            self.recycle(old);
+        let old = if let Some(mesh) = self.build_mesh(pos, chunk) {
+            self.chunks.insert(pos, mesh)
         } else {
-            let mesh = self.build_mesh(pos, chunk);
-            let old = self.chunks.insert(pos, mesh);
-            self.recycle(old);
-        }
+            self.chunks.remove(&pos)
+        };
+        self.recycle(old);
     }
 
     fn recycle(&mut self, mesh: Option<Mesh>) {
         if let Some(old) = mesh {
             if self.mesh_pool.len() < Self::MAX_ALLOC_POOL {
                 self.mesh_pool.push(old);
+            } else {
+                print!("full mesh pool");
             }
         }
     }
 
-    fn build_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) -> Mesh {
+    fn build_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) -> Option<Mesh> {
         self.builder.clear();
 
         // TODO: could use wrapping and stay unsigned since negative becomes really high positive
@@ -123,15 +121,19 @@ impl ChunkList {
             }
         }
 
+        if self.builder.indi.is_empty() {
+            return None;
+        }
+
         // println!("Mesh({}, {}, {}): {} vertices, {} indices, {} cubes.", pos.x, pos.y, pos.z, self.builder.vert.len(), self.builder.indi.len(), count);
 
-        match self.mesh_pool.pop() {
+        Some(match self.mesh_pool.pop() {
             None => self.init_mesh(&self.builder.vert, &self.builder.indi, Self::translate(pos)),
             Some(mut mesh) => {
                 self.reuse_mesh(&mut mesh, &self.builder.vert, &self.builder.indi, Self::translate(pos));
                 mesh
             }
-        }
+        })
     }
 
     fn translate(pos: ChunkPos) -> Mat4 {
@@ -145,20 +147,16 @@ impl ChunkList {
         let indi_b = slice_to_bytes(indi);
 
         if vert_b.len() <= mesh.vertex_buffer.size() as usize {
-            self.reuse_count.set(self.reuse_count.get() + 1);
             self.ctx.write_buffer(&mesh.vertex_buffer, vert_b);
         } else {
-            self.resize_count.set(self.resize_count.get() + 1);
             mesh.vertex_buffer = self.ctx.buffer_init(
                 "tri", vert_b, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
             );
         }
 
         if indi_b.len() <= mesh.index_buffer.size() as usize {
-            self.reuse_count.set(self.reuse_count.get() + 1);
             self.ctx.write_buffer(&mesh.index_buffer, indi_b);
         } else {
-            self.resize_count.set(self.resize_count.get() + 1);
             mesh.index_buffer = self.ctx.buffer_init(
                 "tri", indi_b, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST
             );
@@ -175,7 +173,9 @@ impl ChunkList {
     }
 
     fn init_mesh(&self, vert: &[ModelVertex], indi: &[u32], transform: Mat4) -> Mesh {
-        self.init_count.set(self.init_count.get() + 2);
+        #[cfg(feature = "profiling")]
+        self.init_count.set(self.init_count.get() + 1);
+
         let vertex_buffer = self.ctx.buffer_init(
             "tri", slice_to_bytes(vert), wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
         );
@@ -202,7 +202,7 @@ impl ChunkList {
             index_buffer,
             num_elements: indi.len() as u32,
             transform,
-            info_buffer: info_buffer,
+            info_buffer,
             info_bind_group,
         }
     }

@@ -13,6 +13,10 @@ members = [
     "lua2js/tests/ffi_test"
 ]
 
+[features]
+default = ["profiling"]
+profiling = []
+
 [dependencies]
 winit="0.28.7"  # make a window
 wgpu= "0.18.0"  # cross platform gpu stuff
@@ -50,7 +54,7 @@ opt-level = 2
 codegen-units = 1
 
 [profile.release]
-strip = "debuginfo"
+#strip = "debuginfo"
 panic = "abort"
 #lto = true
 

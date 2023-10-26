@@ -12,9 +12,9 @@ pub struct LocalPos(usize);
 /// The absolute position of a block in the world. Logically (ChunkPos * CHUNK_SIZE)+LocalPos.
 #[derive(Copy, Clone, Eq, PartialEq, Default, Debug)]
 pub struct BlockPos {
-    x: isize,
-    y: isize,
-    z: isize
+    x: i32,
+    y: i32,
+    z: i32
 }
 
 // TODO: needs to be float?
@@ -56,12 +56,6 @@ impl Chunk {
         self.dirty.set(true);
         self.tiles[pos.0] = block;
     }
-
-    // This allows the rendering to quickly know if it can just skip a chunk.
-    // I suspect a lot of chunks will just be air and I want those to be cheap.
-    pub fn is_empty(&self) -> bool {
-        false
-    }
 }
 
 impl LocalPos {
@@ -89,23 +83,31 @@ impl ChunkPos {
     pub fn new(x: i32, y: i32, z: i32) -> ChunkPos {
         ChunkPos { x, y, z }
     }
+
+    pub fn axis_distance(&self, other: &ChunkPos) -> u32 {
+        (self.x.abs_diff(other.x).max(self.y.abs_diff(other.y)).max(self.z.abs_diff(other.z)))
+    }
 }
 
 impl BlockPos {
+    pub fn vec(pos: Vec3) -> BlockPos {
+        BlockPos::new(pos.x as i32, pos.y as i32, pos.z as i32)
+    }
+
     pub fn of(_chunk: ChunkPos, _local: LocalPos) -> Self {
         todo!()
     }
 
-    pub const fn new(x: isize, y: isize, z: isize) -> Self {
+    pub const fn new(x: i32, y: i32, z: i32) -> Self {
         BlockPos { x, y, z }
     }
 
     pub fn chunk(&self) -> ChunkPos {
-        todo!()
+        ChunkPos::new((self.x / CHUNK_SIZE as i32), (self.y / CHUNK_SIZE as i32), (self.z / CHUNK_SIZE as i32))
     }
 
     pub fn local(&self) -> LocalPos {
-        todo!()
+        LocalPos::new((self.x.unsigned_abs() % CHUNK_SIZE as u32) as usize, (self.y.unsigned_abs() % CHUNK_SIZE as u32) as usize, (self.z.unsigned_abs() % CHUNK_SIZE as u32) as usize)
     }
 }
 #[repr(u8)]

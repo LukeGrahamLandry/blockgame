@@ -184,7 +184,7 @@ pub struct SpectatorCameraController {
     sensitivity: f32,
     control_held: bool,
     mouse_pressed: bool,
-    last_update: Instant,
+    pub last_update: Instant,
     pub frozen: bool
 }
 

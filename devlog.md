@@ -10,7 +10,9 @@ Looking at the profiler after flying around a bit, its interesting how much time
 I made a mistake with too small a pool, so it wasn't stabilizing. But even after fixing, init is slow. 
 Added counting and ran it for a bit, got counts `init: 3630, resize: 1584, use: 15500` and profiler says buffer_init (counted as init and resize) is 1.5% and write_buffer (counted as use) is 0.75% of all time.
 I wonder if that big of a difference is just because its doing gpu things or if I should be doing that for all memory (like logical chunks). 
+Also, I could take extra space when resizing. I could have debug mode counting inits to check that I have a big enough pool and am not leaking them. 
 Pleasingly almost no time shows as actually spent in lua. 
+
 
 ## Type stripping (Oct 25)
 
