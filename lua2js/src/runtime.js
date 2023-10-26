@@ -8,7 +8,7 @@ const LuaHelper = (() => {
             return Math.floor(Math.random() * upper) + 1;
         }
         let lower = first;
-        let upper = second;
+        let upper = second + 1;
         return lower + Math.floor(Math.random() * (upper - lower));
     }
 

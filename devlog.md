@@ -1,4 +1,8 @@
-## Type checking (Oct 25)
+## Fixing Transparency 
+
+- https://webgpu.github.io/webgpu-samples/samples/A-buffer (Copyright 2019 WebGPU Samples Contributors, BSD 3-Clause License)
+
+## Type stripping (Oct 25)
 
 Ideas for how to do struct fields. 
 - Generate rust get & set methods for every field and the compiler can emit those for field accesses.

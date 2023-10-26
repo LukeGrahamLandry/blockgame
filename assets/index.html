@@ -18,12 +18,13 @@
 <div>
 
 <script src="./generated/runtime.js"></script>  <!-- For transpiled lua code. -->
+<script src="./generated/compiled.lua.js"></script>  <!-- Lua game logic -->
 <script type="module">
     import init from "./generated/blockgame.js";
     const btn = document.getElementById("start");
     btn.addEventListener("click", () => {
         document.getElementById("info").remove();
-        init();
+        init().then((wasm) => window.wasm = wasm);  // Stick the exports in a global so the lua logic can access them.
         // TODO: more resilient system. do this from rust?
         setTimeout(() => {
             document.getElementById("game").children[0].focus();

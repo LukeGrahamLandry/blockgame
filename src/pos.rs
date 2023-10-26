@@ -32,7 +32,7 @@ pub struct ChunkPos {
 #[derive(Clone)]
 pub struct Chunk {
     pub(crate) pos: ChunkPos,
-    tiles: [Tile; Chunk::LENGTH],
+    pub tiles: [Tile; Chunk::LENGTH],
     pub dirty: Cell<bool>
 }
 

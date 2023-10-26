@@ -3,13 +3,14 @@ use std::ffi::c_void;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::hint::black_box;
 
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[no_mangle]
 pub extern "C" fn add(left: usize, right: usize) -> usize {
     left + right
 }
 
+
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 static LIVE_POINTERS: AtomicIsize = AtomicIsize::new(0);
 
 #[no_mangle]

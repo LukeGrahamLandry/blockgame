@@ -420,7 +420,8 @@ impl WindowContext {
             multisample: MultisampleState {
                 count: 1,
                 mask: !0,
-                alpha_to_coverage_enabled: true,
+                // TODO: before trying the big transparency thing. try with this. browser says: Multisample count (1) must be > 1 when alphaToCoverage is enabled.
+                alpha_to_coverage_enabled: false,
             },
             multiview: None,
         })

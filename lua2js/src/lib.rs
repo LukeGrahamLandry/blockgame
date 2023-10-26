@@ -1,5 +1,12 @@
+use full_moon::ast::Ast;
+use full_moon::{Error, parse};
+
 pub mod translate;
 pub mod strip_types;
+
+pub fn to_ast(lua_src: &str) -> Result<Ast, Box<Error>> {
+    Ok(parse(lua_src)?)
+}
 
 #[cfg(test)]
 mod tests {
@@ -12,7 +19,7 @@ mod tests {
 
     fn compare(lua_src: &str, name: &str) {
         let ast = full_moon::parse(lua_src).unwrap();
-        let js_src = tojs(&ast);
+        let js_src = format!("\n function lua_main(wasm){{\n {} }}", tojs(ast.clone()));
         let lua_ast = StripTypes().visit_ast(ast);
         let lua_out = run_lua(&print(&lua_ast), name);
         let js_out = run_js(&js_src, name);
@@ -54,6 +61,6 @@ mod tests {
     #[test]
     fn dont_crash_parsing_logic() {
         let src = include_str!("../../logic/world.lua");
-        let js = tojs(&full_moon::parse(src).unwrap());
+        let js = tojs(full_moon::parse(src).unwrap());
     }
 }

@@ -39,6 +39,7 @@ wasm-bindgen-futures = "0.4.30"
 console_error_panic_hook = "0.1.6"
 console_log = "1.0"
 log = "0.4"
+wee_alloc = { workspace = true }
 
 [build-dependencies]
 common = { path="./common" }

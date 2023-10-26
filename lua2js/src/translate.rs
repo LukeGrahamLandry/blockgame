@@ -1,4 +1,6 @@
 use full_moon::ast::{Ast, BinOp, Block, Call, Expression, Field, FunctionArgs, FunctionBody, FunctionCall, FunctionName, Index, LastStmt, Prefix, Stmt, Suffix, UnOp, Value, Var};
+use full_moon::tokenizer::{Token, TokenType};
+use full_moon::visitors::VisitorMut;
 use seesea::ast::Module;
 use seesea::scanning::Scanner;
 
@@ -6,23 +8,34 @@ struct State {
     ctypes: Module
 }
 
-pub fn tojs(ast: &Ast) -> String {
+impl VisitorMut for State {
+    fn visit_multi_line_comment(&mut self, token: Token) -> Token {
+        Token::new(TokenType::Whitespace { characters: Default::default() })
+    }
+
+    fn visit_single_line_comment(&mut self, token: Token) -> Token {
+        Token::new(TokenType::Whitespace { characters: Default::default() })
+    }
+}
+
+
+pub fn tojs(ast: Ast) -> String {
     let scanner = Scanner::new("", "ffi".parse().unwrap());
     let mut state = State {
         ctypes: scanner.into()
     };
-    let mut out = "// This file is @generated from lua. Do not edit manually!\n\n function lua_main(wasm){\n".to_string();
+    let ast = state.visit_ast(ast);
+    let mut out = "// This file is @generated from lua. Do not edit manually!\n".to_string();
     for node in ast.nodes().stmts() {
         out += &*stmt2js(node, &mut state);
     }
-    out += "}\n";
     out
 }
 
 // TODO: make this configurable
 /// Enables explicit runtime type checking.
 /// - Arithmetic is on numbers or coercible strings.
-const SAFE: bool = true;
+const SAFE: bool = false;
 
 fn block2js(block: &Block, state: &mut State) -> String {
     let mut out = "{\n".to_string();
@@ -175,7 +188,7 @@ fn expr2js(expr: &Expression, state: &mut State) -> String {
                 BinOp::And(_) => "&&",
                 BinOp::Caret(_) => todo!(),
                 BinOp::GreaterThan(_) => ">",
-                BinOp::GreaterThanEqual(_) => "+>",
+                BinOp::GreaterThanEqual(_) => ">=",
                 BinOp::LessThan(_) => "<",
                 BinOp::LessThanEqual(_) => "<=",
                 BinOp::Minus(_) => "-",
@@ -315,7 +328,7 @@ fn call2js(call: &FunctionCall, state: &mut State) -> String {
         if method == ".new" {
             let c_type_name = suffixes.next().unwrap().to_string();
             assert!(suffixes.next().is_none());
-            let size = 100;
+            let size = 9000;  // TODO: !!!!!
             return format!("wasm.lua_alloc({})", size);
         }
         else if method == ".C" {

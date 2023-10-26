@@ -16,8 +16,10 @@ typedef struct Chunk {
     char dirty;  // TODO: seesea doesn't know bool yet
 } Chunk;
 
-void generate_chunk(void* state, Chunk* chunk);
+void generate_chunk(void* state, Chunk* chunk, int x, int y, int z);
 void update_mesh(void* state, Chunk* chunk);
+int chunk_get_block(Chunk* chunk, int index);
+int chunk_set_block(Chunk* chunk, int index, int tile);
 
 ]]
 
@@ -34,21 +36,21 @@ local chunk_size = 16
 
 -- TODO: give a way to remove this. rust replace conditionally?
 function debug_assert(c, msg, ...)
-    local arg={...}
-    if not c then
-        -- TODO: implement format and unpack in my transpiler
-        -- error(string.format(msg, unpack(arg)))
-        for _,v in arg do
-            print(v)
-        end
-        error(msg)
-    end
+    --local arg={...}
+    --if not c then
+    --    -- TODO: implement format and unpack in my transpiler
+    --    -- error(string.format(msg, unpack(arg)))
+    --    for _,v in arg do
+    --        print(v)
+    --    end
+    --    error(msg)
+    --end
 end
 
 -- TODO: this is so it knows types. i don't like this very much.
 --       also my tpye stripping is fragile. if these don't have a value, they get put on the same line
-local block_random_tick_handlers: { [number]: (World, Chunk, number, number, number) -> () } = block_random_tick_handlers
-local gen: { tiles: { [string]: number} } = gen
+local block_random_tick_handlers: { [number]: (World, Chunk, number, number, number) -> () } = {}
+--local gen: { tiles: { [string]: number} } = gen
 
 type Chunk = {
     tiles: { [number]: { v: number } },
@@ -68,10 +70,7 @@ World = {
         local chunk: Chunk = self.chunks[key]
         if chunk == nil then
             chunk = ffi.new("Chunk")
-            chunk.x = x
-            chunk.y = y
-            chunk.z = z
-            ffi.C.generate_chunk(rust_state, chunk)
+            ffi.C.generate_chunk(rust_state, chunk, x, y, z)
             self.any_chunk_dirty = true
             self.chunks[key] = chunk
         end
@@ -89,10 +88,13 @@ World = {
     set_block_local = function(self, chunk: Chunk, lx, ly, lz, tile)
         local index = local_to_index(lx, ly, lz)
         -- TODO: some sort of type safety so you can't just pass random numbers in. for now, debug mode rust checks when generating the mesh
-        local old = chunk.tiles[index].v
-        chunk.tiles[index].v = tile
-        if old ~= tile then
-            chunk.dirty = true
+        --local old = chunk.tiles[index].v
+        --chunk.tiles[index].v = tile
+        --if old ~= tile then
+        --    chunk.dirty = true
+        --    self.any_chunk_dirty = true
+        --end
+        if ffi.C.chunk_set_block(chunk, index, tile) ~= 0 then
             self.any_chunk_dirty = true
         end
     end,
@@ -107,7 +109,8 @@ World = {
     -- TODO: its a little dumb that this is in the World table but isn't a method so has different syntax to call
     get_block_local = function(chunk, lx, ly, lz)
         local index = local_to_index(lx, ly, lz)
-        return chunk.tiles[index].v
+        --return chunk.tiles[index].v
+        return ffi.C.chunk_get_block(chunk, index)
     end,
 
     -- Indexes are undefined and inconsistent. Only useful for choosing a random chunk
