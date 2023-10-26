@@ -10,6 +10,7 @@ pub extern "C" fn add(left: usize, right: usize) -> usize {
 }
 
 
+#[cfg(target_arch = "wasm32")]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 static LIVE_POINTERS: AtomicIsize = AtomicIsize::new(0);
 

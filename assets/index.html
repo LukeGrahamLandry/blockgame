@@ -14,22 +14,34 @@
 <body>
 <div id="game"></div>
 <div id="info">
-    <button id="start"> Start Game </button> <span style="color: red"> <-- click me </span> <br>
+    <button id="start"> Start Game </button> <span style="color: red" id="click"> <-- click me </span> <br>
+    <br>
+    <b> Controls </b> <br>
+    - WASD to move, space/shift for up/down, mouse to look around. <br>
+    <br>
+    <b> How It Works </b> <br>
+    - Rendering engine written in rust, using wgpu, compiled to wasm. <br>
+    - Game logic written in lua, transpiled to JavaScript. <br>
 <div>
 
 <script src="./generated/runtime.js"></script>  <!-- For transpiled lua code. -->
 <script src="./generated/compiled.lua.js"></script>  <!-- Lua game logic -->
 <script type="module">
     import init from "./generated/blockgame.js";
-    const btn = document.getElementById("start");
-    btn.addEventListener("click", () => {
-        document.getElementById("info").remove();
-        init().then((wasm) => window.wasm = wasm);  // Stick the exports in a global so the lua logic can access them.
-        // TODO: more resilient system. do this from rust?
-        setTimeout(() => {
-            document.getElementById("game").children[0].focus();
-        }, 500);  // Wait for winit to grab the canvas? IDK but keyboard input doesn't work without this.
-    });
+    if (navigator.gpu === undefined) {
+        document.getElementById("start").disabled = true;
+        document.getElementById("click").innerText = "Your browser doesn't support WebGPU. Maybe try desktop Chrome.";
+    } else {
+        const btn = document.getElementById("start");
+        btn.addEventListener("click", () => {
+            document.getElementById("info").remove();
+            init().then((wasm) => window.wasm = wasm);  // Stick the exports in a global so the lua logic can access them.
+            // TODO: more resilient system. do this from rust?
+            setTimeout(() => {
+                document.getElementById("game").children[0].focus();
+            }, 500);  // Wait for winit to grab the canvas? IDK but keyboard input doesn't work without this.
+        });
+    }
 </script>
 </body>
 </html>

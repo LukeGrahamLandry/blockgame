@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use glam::{Mat4, Vec3, Vec4};
@@ -16,7 +17,10 @@ pub struct ChunkList {
 
     // Old meshes not currently in use. When loading a new chunk, check if there's one here,
     // since I assume it's cheaper to update a buffer than create a new one.
-    mesh_pool: Vec<Mesh>
+    mesh_pool: Vec<Mesh>,
+    init_count: Cell<usize>,
+    resize_count: Cell<usize>,
+    reuse_count: Cell<usize>
 }
 
 impl ChunkList {
@@ -31,7 +35,15 @@ impl ChunkList {
                 indi: Vec::with_capacity(10000),
             },
             mesh_pool: Vec::with_capacity(Self::MAX_ALLOC_POOL),
+            init_count: Cell::new(0),
+            resize_count: Cell::new(0),
+            reuse_count: Cell::new(0),
         }
+    }
+
+    pub fn remove(&mut self, pos: ChunkPos) {
+        let old = self.chunks.remove(&pos);
+        self.recycle(old);
     }
 
     pub fn render<'a>(&'a self, render_pass: &mut RenderPass<'a>) {
@@ -45,10 +57,13 @@ impl ChunkList {
     }
 
     const CHUNK_SCALE: f32 = CHUNK_SIZE as f32;
-    const MAX_ALLOC_POOL: usize = 20;
+    const MAX_ALLOC_POOL: usize = 200;  // TODO: need to set this dynamically based on render distance.
 
     pub fn update_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) {
         // println!("Meshes: {} + {}", self.chunks.len(), self.mesh_pool.len());
+        if self.reuse_count.get() % 500 == 0 {
+            println!("init: {}, resize: {}, use: {}", self.init_count.get(), self.resize_count.get(), self.reuse_count.get())
+        }
         if chunk.is_empty() {
             let old = self.chunks.remove(&pos);
             self.recycle(old);
@@ -130,16 +145,20 @@ impl ChunkList {
         let indi_b = slice_to_bytes(indi);
 
         if vert_b.len() <= mesh.vertex_buffer.size() as usize {
+            self.reuse_count.set(self.reuse_count.get() + 1);
             self.ctx.write_buffer(&mesh.vertex_buffer, vert_b);
         } else {
+            self.resize_count.set(self.resize_count.get() + 1);
             mesh.vertex_buffer = self.ctx.buffer_init(
                 "tri", vert_b, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
             );
         }
 
         if indi_b.len() <= mesh.index_buffer.size() as usize {
+            self.reuse_count.set(self.reuse_count.get() + 1);
             self.ctx.write_buffer(&mesh.index_buffer, indi_b);
         } else {
+            self.resize_count.set(self.resize_count.get() + 1);
             mesh.index_buffer = self.ctx.buffer_init(
                 "tri", indi_b, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST
             );
@@ -156,6 +175,7 @@ impl ChunkList {
     }
 
     fn init_mesh(&self, vert: &[ModelVertex], indi: &[u32], transform: Mat4) -> Mesh {
+        self.init_count.set(self.init_count.get() + 2);
         let vertex_buffer = self.ctx.buffer_init(
             "tri", slice_to_bytes(vert), wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
         );

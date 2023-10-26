@@ -306,6 +306,8 @@ fn call2js(call: &FunctionCall, state: &mut State) -> String {
         func = "LuaHelper.setmetatable".to_string();
     } else if func == "error" {
         func = "throw".to_string();
+    } else if func == "debug_assert" && !SAFE {
+        return String::new();
     } else {
         func = unkeyword(func);
     }

@@ -2,6 +2,16 @@
 
 - https://webgpu.github.io/webgpu-samples/samples/A-buffer (Copyright 2019 WebGPU Samples Contributors, BSD 3-Clause License)
 
+## Infinite world
+
+Confusing error. The message for "you forgot to define it in the cdef call" is the same as for "the linker optimised it out, so it doesn't exist at runtime".
+
+Looking at the profiler after flying around a bit, its interesting how much time is buffer_init compared to write_buffer, seems I was very right about reusing those chunk objects. 
+I made a mistake with too small a pool, so it wasn't stabilizing. But even after fixing, init is slow. 
+Added counting and ran it for a bit, got counts `init: 3630, resize: 1584, use: 15500` and profiler says buffer_init (counted as init and resize) is 1.5% and write_buffer (counted as use) is 0.75% of all time.
+I wonder if that big of a difference is just because its doing gpu things or if I should be doing that for all memory (like logical chunks). 
+Pleasingly almost no time shows as actually spent in lua. 
+
 ## Type stripping (Oct 25)
 
 Ideas for how to do struct fields. 

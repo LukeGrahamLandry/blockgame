@@ -20,6 +20,8 @@ void generate_chunk(void* state, Chunk* chunk, int x, int y, int z);
 void update_mesh(void* state, Chunk* chunk);
 int chunk_get_block(Chunk* chunk, int index);
 int chunk_set_block(Chunk* chunk, int index, int tile);
+void unload_chunk(void* state, Chunk* chunk);
+void lua_drop(void* ptr);
 
 ]]
 
@@ -34,21 +36,21 @@ local blocks_per_random_tick = 4000  -- each time a chunk gets ticked, x blocks 
 local ticks_per_sec = 60
 local chunk_size = 16
 
--- TODO: give a way to remove this. rust replace conditionally?
+-- Calls to this function are magically removed when transpiling to JS if not in SAFE mode. (TODO: do that in type stripping for native as well)
+-- Arguments passed to it must not have side effects. With great power comes great responsibility!
 function debug_assert(c, msg, ...)
-    --local arg={...}
-    --if not c then
-    --    -- TODO: implement format and unpack in my transpiler
-    --    -- error(string.format(msg, unpack(arg)))
-    --    for _,v in arg do
-    --        print(v)
-    --    end
-    --    error(msg)
-    --end
+    local arg={...}
+    if not c then
+        -- TODO: implement format and unpack in my transpiler
+        -- error(string.format(msg, unpack(arg)))
+        for _,v in arg do
+            print(v)
+        end
+        error(msg)
+    end
 end
 
--- TODO: this is so it knows types. i don't like this very much.
---       also my tpye stripping is fragile. if these don't have a value, they get put on the same line
+-- TODO: my type stripping is fragile. if these don't have a value, they get put on the same line
 local block_random_tick_handlers: { [number]: (World, Chunk, number, number, number) -> () } = {}
 --local gen: { tiles: { [string]: number} } = gen
 
@@ -77,6 +79,16 @@ World = {
         return chunk
     end,
 
+    unload_chunk = function(self, cx: number, cy: number, cz: number)
+        local key = cx .. ":" .. cy .. ":" .. cz
+        local chunk = self.chunks[key]
+        if chunk ~= nil then
+            ffi.C.unload_chunk(rust_state, chunk)
+            ffi.C.lua_drop(chunk)
+            self.chunks[key] = nil
+        end
+    end,
+
     -- x,y,z are BlockPos. tile must be a constant from the gen.tiles
     set_block = function(self, bx, by, bz, tile)
         local cx, cy, cz = block_to_chunk_pos(bx, by, bz)
@@ -88,6 +100,7 @@ World = {
     set_block_local = function(self, chunk: Chunk, lx, ly, lz, tile)
         local index = local_to_index(lx, ly, lz)
         -- TODO: some sort of type safety so you can't just pass random numbers in. for now, debug mode rust checks when generating the mesh
+        -- TODO: implement struct fields in my compiler so I don't have to write cringe getters
         --local old = chunk.tiles[index].v
         --chunk.tiles[index].v = tile
         --if old ~= tile then
@@ -173,9 +186,60 @@ type World = typeof(World)
 
 the_world = new(World)
 
-function run_tick(state)
+local load_radius = 5
+local unload_radius = 8
+local prev_chunk = nil
+local ticks_in_chunk = 0
+
+function load_around_player(player_bx, player_by, player_bz) 
+    local cx, cy, cz = block_to_chunk_pos(player_bx, player_by, player_bz)
+    local current_chunk = the_world:get_chunk(cx, cy, cz)
+    if prev_chunk ~= current_chunk then
+        ticks_in_chunk = 0
+        load_square(cx, cy, cz, load_radius)
+        unload_square(cx, cy, cz, unload_radius)
+        if prev_chunk == nil then
+            for r=1,(load_radius - 1) do
+                load_square(cx, cy, cz, r)
+            end
+        end
+        prev_chunk = current_chunk
+    elseif ticks_in_chunk < load_radius then
+        ticks_in_chunk = ticks_in_chunk + 1 
+        load_square(cx, cy + ticks_in_chunk, cz, load_radius)
+        load_square(cx, cy - ticks_in_chunk, cz, load_radius)
+        unload_square(cx, cy + ticks_in_chunk, cz, unload_radius)
+        unload_square(cx, cy - ticks_in_chunk, cz, unload_radius)
+    end
+end
+
+-- Load a hollow square around (cx, cy, cz) flat (y=cy). 
+function load_square(cx, cy, cz, rad)
+    for x=-rad,rad do 
+        local _ = the_world:get_chunk(cx + x, cy, cz - rad)
+        local __ = the_world:get_chunk(cx + x, cy, cz + rad)
+    end
+    for z=-rad,rad do 
+        local _ = the_world:get_chunk(cx - rad, cy, cz + z)
+        local __ = the_world:get_chunk(cx + rad, cy, cz + z)
+    end
+end
+
+function unload_square(cx, cy, cz, rad)
+    for x=-rad,rad do 
+        local _ = the_world:unload_chunk(cx + x, cy, cz - rad)
+        local __ = the_world:unload_chunk(cx + x, cy, cz + rad)
+    end
+    for z=-rad,rad do 
+        local _ = the_world:unload_chunk(cx - rad, cy, cz + z)
+        local __ = the_world:unload_chunk(cx + rad, cy, cz + z)
+    end
+end
+
+function run_tick(state, player_bx, player_by, player_bz)
     rust_state = state
-    the_world:set_block(0, 0, 0, gen.tiles.stone)
+
+    load_around_player(player_bx, player_by, player_bz)
     
     local count = the_world:chunk_count()
     if count > 0 then

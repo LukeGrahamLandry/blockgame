@@ -5,6 +5,7 @@ pub mod gen;
 pub mod lua_api;
 pub mod world;
 pub mod pos;
+mod worldgen;
 
 use std::mem::size_of;
 use std::rc::Rc;

@@ -29,8 +29,8 @@ mlua = { workspace=true }
 [workspace.dependencies]
 glam="0.24.2"  # low-d linear algebra
 image = "0.24.7" # load png files
-mlua = { version = "0.9.1", features = ["luajit52", "vendored"] }
-wee_alloc = "0.4.5"
+mlua = { version = "0.9.1", features = ["luajit52", "vendored"] }  # luajit bindings
+wee_alloc = "0.4.5"  # wasm memory allocator
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version="0.3.64", features=["Window", "HtmlElement"]}
@@ -51,7 +51,7 @@ codegen-units = 1
 
 [profile.release]
 strip = "debuginfo"
-#panic = "abort"
+panic = "abort"
 #lto = true
 
 [profile.release.package."*"]

@@ -8,6 +8,7 @@ pub fn to_ast(lua_src: &str) -> Result<Ast, Box<Error>> {
     Ok(parse(lua_src)?)
 }
 
+// test rust calling in to lua
 #[cfg(test)]
 mod tests {
     use std::fs;
