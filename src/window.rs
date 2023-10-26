@@ -101,7 +101,9 @@ impl WindowContext {
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
+            flags: Default::default(),
             dx12_shader_compiler: Default::default(),
+            gles_minor_version: Default::default(),
         });
 
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
@@ -446,7 +448,7 @@ impl WindowContext {
                                 a: 1.0,
                             }
                         ),
-                        store: true,
+                        store: StoreOp::Store,
                     }
                 })
             ],
@@ -454,10 +456,12 @@ impl WindowContext {
                 view: depth_texture,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
-                    store: true,
+                    store: StoreOp::Store,
                 }),
                 stencil_ops: None,
             }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
         })
     }
 }

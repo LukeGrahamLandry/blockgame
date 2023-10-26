@@ -40,3 +40,33 @@ end
 if 0 then
     print("c")
 end
+
+-- Basic numeric for loop.
+for i=1,3 do
+    print(i)
+end
+
+-- TODO: support step expression
+-- Custom step expression.
+--for i=1,10,2 do
+--    print(i)
+--end
+-- Step backwards,
+--for i=3,1,-1 do
+--    print(i)
+--end
+
+-- TODO: End expr is evaluated every time but shouldn't be
+--local a = 5
+--function lawful_evil()
+--    a = a + 1
+--    return a
+--end
+-- Stop expression should only be evaluated once.
+--for i=1,lawful_evil() do
+--    print(i)
+--end
+-- Step expression should only be evaluated once.
+--for i=1,15,lawful_evil() do
+--    print(i)
+--end

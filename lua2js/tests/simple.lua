@@ -58,5 +58,14 @@ print(not nil)
 print(not 1)
 print(not 0)
 
+-- Scope
+a_global = 10
+print(a_global)
+if true then
+    local a_global = 15
+    print(a_global)
+end
+print(a_global)
+
 -- TODO: broken
 -- print(0 or 1)

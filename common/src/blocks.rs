@@ -19,7 +19,7 @@ struct BlockInit {
     lua_tiles: String,
 }
 
-pub fn gen(out_dir: &str) {
+pub fn gen(out_dir: &str) -> String {
     let mut blocks = BlockInit::new();
     blocks.build();
     let gen_path = format!("{}/gen.rs", out_dir);
@@ -27,6 +27,7 @@ pub fn gen(out_dir: &str) {
     Command::new("rustfmt").arg(&gen_path).status().unwrap();
     fs::write(format!("{}/gen.lua", out_dir), blocks.lua()).unwrap();
     blocks.atlas.save(&format!("{}/atlas.png", out_dir));
+    blocks.lua()  // TODO: temp hack for build script. wither return more info or nothing
 }
 
 impl BlockInit {

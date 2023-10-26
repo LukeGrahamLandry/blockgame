@@ -1,8 +1,6 @@
-use std::sync::RwLock;
 use full_moon::ast::{Ast, BinOp, Block, Call, Expression, Field, FunctionArgs, FunctionBody, FunctionCall, FunctionName, Index, LastStmt, Prefix, Stmt, Suffix, UnOp, Value, Var};
 use seesea::ast::Module;
 use seesea::scanning::Scanner;
-use seesea::test_logic::compile_module;
 
 struct State {
     ctypes: Module
@@ -120,12 +118,17 @@ fn stmt2js(stmt: &Stmt, state: &mut State) -> String {
             }
         },
         Stmt::LocalFunction(_) => todo!(),
-        Stmt::NumericFor(_) => todo!(),
+        Stmt::NumericFor(node) => {
+            assert!(node.step().is_none()); // TODO: explicit step value defaults to one.
+            // TODO: this is wrong because it evaluates the ned expression every time.
+            out += &*format!("for (let {0}={1}; {0}<={2}; {0} += 1)", node.index_variable(), expr2js(node.start(), state), expr2js(node.end(), state));
+            out += &*block2js(node.block(), state);
+        },
         Stmt::Repeat(_) => todo!(),
         Stmt::While(_) => todo!(),
         Stmt::CompoundAssignment(_) => todo!(),
         Stmt::ExportedTypeDeclaration(_) => todo!(),
-        Stmt::TypeDeclaration(_) => todo!(),
+        Stmt::TypeDeclaration(_) => {},
         _ => unimplemented!()
     }
 
@@ -258,7 +261,7 @@ fn value2js(value: &Value, state: &mut State) -> String {
         Value::ParenthesesExpression(expr) => expr2js(expr, state),
         Value::String(val) => val.to_string(),
         Value::Symbol(sym) => {
-            let sym = sym.to_string();
+            let sym = sym.token().to_string();
             let sym = sym.trim();
             if sym == "true" {
                 "true".to_string()
@@ -311,7 +314,6 @@ fn call2js(call: &FunctionCall, state: &mut State) -> String {
         }
         if method == ".new" {
             let c_type_name = suffixes.next().unwrap().to_string();
-            println!("new: {}", c_type_name);
             assert!(suffixes.next().is_none());
             let size = 100;
             return format!("wasm.lua_alloc({})", size);

@@ -2,6 +2,8 @@ local ffi = require("ffi")
 local math = require("math")
 --local string = require("string")
 
+rust_state = nil  -- TODO: this sucks, but I don't really want to pass around rust privileges everywhere
+
 -- TODO: seesea doesn't recognise 'unsigned' yet
 ffi.cdef[[
 typedef short u16;
@@ -19,11 +21,8 @@ void update_mesh(void* state, Chunk* chunk);
 
 ]]
 
---- @generic A
---- @param cls A
---- @return A
-function new(cls)
-    local obj = {}
+function new<T>(cls: T): T
+    local obj = {} 
     setmetatable(obj, { __index=cls })
     return obj
 end
@@ -46,14 +45,27 @@ function debug_assert(c, msg, ...)
     end
 end
 
+-- TODO: this is so it knows types. i don't like this very much.
+--       also my tpye stripping is fragile. if these don't have a value, they get put on the same line
+local block_random_tick_handlers: { [number]: (World, Chunk, number, number, number) -> () } = block_random_tick_handlers
+local gen: { tiles: { [string]: number} } = gen
+
+type Chunk = {
+    tiles: { [number]: { v: number } },
+    dirty: boolean,
+    x: number,
+    y: number,
+    z: number
+}
+
 World = {
-    chunks = {},
+    chunks = {} :: { [string]: Chunk },
     any_chunk_dirty = false,
 
     -- x,y,z are ChunkPos
-    get_chunk = function(self, x, y, z)
+    get_chunk = function(self, x: number, y: number, z: number): Chunk
         local key = x .. ":" .. y .. ":" .. z
-        local chunk = self.chunks[key]
+        local chunk: Chunk = self.chunks[key]
         if chunk == nil then
             chunk = ffi.new("Chunk")
             chunk.x = x
@@ -74,7 +86,7 @@ World = {
         self:set_block_local(chunk, lx, ly, lz, tile)
     end,
 
-    set_block_local = function(self, chunk, lx, ly, lz, tile)
+    set_block_local = function(self, chunk: Chunk, lx, ly, lz, tile)
         local index = local_to_index(lx, ly, lz)
         -- TODO: some sort of type safety so you can't just pass random numbers in. for now, debug mode rust checks when generating the mesh
         local old = chunk.tiles[index].v
@@ -100,7 +112,7 @@ World = {
 
     -- Indexes are undefined and inconsistent. Only useful for choosing a random chunk
     --- @param i number
-    get_chunk_index = function(self, i)
+    get_chunk_index = function(self, i): Chunk
         -- TODO: this is kinda dumb
         local count = 0
         for _, chunk in pairs(self.chunks) do
@@ -110,6 +122,7 @@ World = {
             end
         end
         debug_assert(false, "get_chunk_index %d out of bounds", i)
+        error("unreachable")
     end,
 
     -- TODO: track separately since I know when a chunk is added
@@ -117,7 +130,7 @@ World = {
        return table_len(self.chunks)
     end,
 
-    do_random_ticks = function(self, chunk)
+    do_random_ticks = function(self, chunk: Chunk)
         for i=1,blocks_per_random_tick do
             local lx, ly, lz = math.random(0, chunk_size -1), math.random(0, chunk_size -1), math.random(0, chunk_size -1)
             local handler = block_random_tick_handlers[self.get_block_local(chunk, lx, ly, lz)]
@@ -153,13 +166,14 @@ function local_to_index(lx, ly, lz)
     return (ly * chunk_size * chunk_size) + (lx * chunk_size) + lz
 end
 
+type World = typeof(World)
+
 the_world = new(World)
-rust_state = nil  -- TODO: this sucks, but I don't really want to pass around rust privileges everywhere
 
 function run_tick(state)
     rust_state = state
     the_world:set_block(0, 0, 0, gen.tiles.stone)
-
+    
     local count = the_world:chunk_count()
     if count > 0 then
         -- Each chunk ticks every x so one of n chunks ticks every x/n

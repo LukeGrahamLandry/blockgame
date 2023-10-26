@@ -18,9 +18,7 @@ pub mod lua {
                 Lua::unsafe_new()
             };
 
-            lua.load(include_str!(concat!(env!("OUT_DIR"), "/gen.lua"))).exec().unwrap();
-            lua.load(include_str!("../logic/world.lua")).exec().unwrap();
-            lua.load(include_str!("../logic/blocks.lua")).exec().unwrap();
+            lua.load(include_str!(concat!(env!("OUT_DIR"), "/compiled.lua"))).exec().unwrap();
 
             Self { lua }
         }
@@ -35,9 +33,9 @@ pub mod lua {
 
 #[cfg(target_arch = "wasm32")]
 pub mod lua {
-    use mlua::{Function, LightUserData, Lua};
     use std::ffi::c_void;
     use crate::State;
+    use wasm_bindgen::prelude::*;
 
     pub struct GameLogic {}
 
@@ -53,7 +51,7 @@ pub mod lua {
 
     #[wasm_bindgen]
     extern "C" {
-        fn tick_chunk(state: &mut State);
+        fn tick_chunk(state: *mut State);
     }
 }
 

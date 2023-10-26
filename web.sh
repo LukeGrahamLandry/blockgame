@@ -1,6 +1,8 @@
-# install wasm-bindgen  ....somehow
+# cargo install wasm-bindgen-cli
 # cargo install wasm-opt
+
 mkdir "assets/generated"
+cp "lua2js/src/runtime.js" "assets/generated/runtime.js"
 
 if [ "$1" == "--release" ] ; then
   echo "Building for release..."

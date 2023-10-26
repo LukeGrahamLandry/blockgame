@@ -1,15 +1,20 @@
 pub mod translate;
+pub mod strip_types;
 
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::process::Command;
+    use full_moon::print;
+    use crate::strip_types::StripTypes;
     use crate::translate::tojs;
+    use full_moon::visitors::{VisitorMut};
 
     fn compare(lua_src: &str, name: &str) {
         let ast = full_moon::parse(lua_src).unwrap();
         let js_src = tojs(&ast);
-        let lua_out = run_lua(lua_src, name);
+        let lua_ast = StripTypes().visit_ast(ast);
+        let lua_out = run_lua(&print(&lua_ast), name);
         let js_out = run_js(&js_src, name);
         println!("Compare: {}", name);
         assert_eq!(lua_out, js_out);

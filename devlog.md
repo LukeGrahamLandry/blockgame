@@ -1,4 +1,21 @@
-# Lua wasm ffi (Oct 25)
+## Type checking (Oct 25)
+
+Ideas for how to do struct fields. 
+- Generate rust get & set methods for every field and the compiler can emit those for field accesses.
+  - Since my parser (in theory) knows the ABI for field sizes/padding, I could do field accesses based on offsets and only have a few helpers for reading primitive types out of raw pointers. 
+- Use js typed array views into wasm memory. Relies on knowing ABI for field layout. 
+- If I supported dynamic index lookups from metatables like real lua I could set that up with either of the above when the object was created and not need full static types for any c structs. 
+  - Would need to unwrap the pointer when passing to wasm but that's safer anyway than just assuming it's fine. 
+  - Feels a little sad to have double boxing of pointers. 
+
+The first two require static types whenever accessing struct fields. 
+Which is kinda something I want anyway. The lua parser I'm using supports luau (which is roblox's typed lua dialect I guess). 
+I don't really want to use their vm, it seems to not have luajit's nice ffi which is the whole point of this. 
+It's pretty easy to write something that strips the type annotations out of the ast and the library can print it out again for running with luajit. 
+Also, there's a VS Code plugin for it so better autocomplete which is nice. I much prefer the typescript-like syntax over the comment driven Intellij plugin I was using before. 
+- https://luau-lang.org/
+
+## Lua wasm ffi (Oct 25)
 
 - https://github.com/LukeGrahamLandry/seesea
 
@@ -14,7 +31,18 @@ JS gives you the same transparent argument conversion as luajit, so can just do 
 Need to go through and make sure they handle weird type conversions the same at some point. 
 
 luajit handles allocating and garbage collecting memory created by `ffi.new` so I need to do that myself for wasm. 
-- https://github.com/rustwasm/wee_alloc
+- JS doesn't give you gc hooks for destructors, but I can manually drop that's a no-op when running in luajit. 
+- Have rust alloc and drop functions, I don't want to generate new constructors for each type so just have the compiler say how big the struct is. 
+  - I'm zero initializing which technically isn't safe for all rust types. 
+  - Need to make sure I'm not breaking any rules about alignment by pretending I'm just asking for bytes. 
+  - My c parser should be doing the right struct padding, but I should really be generating tests that it's the same as whatever abi `#[repr(C)]` means in wasm. 
+- Can't just call libc in wasm but found a rust allocator library that advertises its wasm support. 
+  - https://github.com/rustwasm/wee_alloc
+- The rust allocator api wants a "Layout" for both malloc and free, so it needs to know the size. How does libc free just need the pointer? 
+For now, I'll just allocate an extra word and write the size before the pointer, so I can read it back when you free it to use the right layout
+Would be cleverer if I trusted my typing enough to have the compiler implicitly pass the right size of the struct based on static typing when you call drop.
+- Have some rudimentary leak detection by counting how many allocations minus de-allocations I do. 
+- So that works for allocating structs and passing pointers to rust. More thought required for how to access fields from lua. 
 
 ## Lua in the browser (Oct 24)
 
