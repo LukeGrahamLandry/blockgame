@@ -19,7 +19,7 @@ profiling = []
 
 [dependencies]
 winit="0.28.7"  # make a window
-wgpu= "0.18.0"  # cross platform gpu stuff
+wgpu= { version = "0.18.0" }  # cross platform gpu stuff  # can make it run in safari with , features = ["webgl"] but makes the wasm bigger
 pollster="0.3.0"  # wgpu init functions are async but I don't need a whole runtime
 env_logger="0.10.0"  # access logs from wgpu
 common = { path="./common" }
@@ -54,9 +54,9 @@ opt-level = 2
 codegen-units = 1
 
 [profile.release]
-#strip = "debuginfo"
+strip = "debuginfo"
 panic = "abort"
-#lto = true
+lto = true
 
 [profile.release.package."*"]
 codegen-units = 1

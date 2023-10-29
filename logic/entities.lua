@@ -37,7 +37,6 @@ FallingBlock = {
     tick = function(self)
         local below = self.world:get_block(self.x, self.y - 1, self.z)
         if below ~= 0 then
-            print("hit floor!", self.x, self.y, self.z)
             self.world:set_block(self.x, self.y, self.z, self.tile)
             self.world:remove_entity(self)
         else
