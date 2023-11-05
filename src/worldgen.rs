@@ -1,5 +1,6 @@
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
+use std::mem::size_of;
 use common::pos::Tile;
 use crate::chunk_mesh::ChunkList;
 use crate::gen;
@@ -47,6 +48,7 @@ impl LogicChunks {
         self.chunks.iter().nth(choice).unwrap().1.get()
     }
 
+    // TODO: unload logic chunks at some distance too.
     pub fn gc(&mut self, player: BlockPos, render: &mut ChunkList) {
         let unload_radius = 10;
         let player = player.chunk();
@@ -63,6 +65,12 @@ impl LogicChunks {
         });
 
         println!("gc cleared {} chunks", count);
+    }
+
+    #[cfg(feature = "profiling")]
+    pub fn log_profile(&self) {
+        // MB does not include map overhead
+        println!("ChunkLogic:\n  - loaded: {}\n  - core MB: {}", self.chunks.len(), self.chunks.len() * size_of::<Chunk>() / 1024 / 1024);
     }
 }
 

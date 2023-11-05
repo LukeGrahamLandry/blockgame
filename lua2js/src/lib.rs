@@ -3,6 +3,8 @@ use full_moon::{Error, parse};
 
 pub mod translate;
 pub mod strip_types;
+pub mod ast;
+mod parse;
 
 pub fn to_ast(lua_src: &str) -> Result<Ast, Box<Error>> {
     Ok(parse(lua_src)?)

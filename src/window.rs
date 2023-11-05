@@ -15,7 +15,6 @@ use wgpu::util::DeviceExt;
 
 
 pub struct Mesh {
-    pub name: String,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
@@ -32,7 +31,6 @@ impl Mesh {
         render_pass.draw_indexed(0..self.num_elements, 0, 0..1);
     }
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]

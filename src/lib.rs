@@ -127,6 +127,12 @@ impl App for State {
                     }
                     self.controller.frozen = !self.controller.frozen;
                 }
+                #[cfg(feature = "profiling")]
+                VirtualKeyCode::P => if *state == Pressed {
+                    self.chunks.log_profile();
+                    self.world.log_profile();
+                    self.entities.log_profile();
+                }
                 _ => {  }
             }
         };

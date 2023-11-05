@@ -17,9 +17,11 @@ pub struct ChunkList {
 
     // Old meshes not currently in use. When loading a new chunk, check if there's one here,
     // since I assume it's cheaper to update a buffer than create a new one.
-    mesh_pool: Vec<Mesh>,
+    pub mesh_pool: Vec<Mesh>,
     #[cfg(feature = "profiling")]
     init_count: Cell<usize>,
+    #[cfg(feature = "profiling")]
+    memory: Cell<u64>
 }
 
 impl ChunkList {
@@ -36,6 +38,8 @@ impl ChunkList {
             mesh_pool: Vec::with_capacity(Self::MAX_ALLOC_POOL),
             #[cfg(feature = "profiling")]
             init_count: Cell::new(0),
+            #[cfg(feature = "profiling")]
+            memory: Cell::new(0),
         }
     }
 
@@ -55,7 +59,7 @@ impl ChunkList {
     }
 
     const CHUNK_SCALE: f32 = CHUNK_SIZE as f32;
-    const MAX_ALLOC_POOL: usize = 1500;  // TODO: need to set this dynamically based on render distance.
+    const MAX_ALLOC_POOL: usize = 1000;  // TODO: need to set this dynamically based on render distance.
 
     pub fn update_mesh(&mut self, pos: ChunkPos, chunk: &Chunk) {
         // println!("Meshes: {} + {}", self.chunks.len(), self.mesh_pool.len());
@@ -139,24 +143,32 @@ impl ChunkList {
     }
 
     // This checks that there's enough space in the buffer before writing. Resizing will amortize.
-    fn reuse_mesh(&self, mesh: &mut Mesh, vert: &[ModelVertex], indi: &[u32], transform: Mat4)  {
+    pub(crate) fn reuse_mesh(&self, mesh: &mut Mesh, vert: &[ModelVertex], indi: &[u32], transform: Mat4)  {
         let vert_b = slice_to_bytes(vert);
         let indi_b = slice_to_bytes(indi);
 
         if vert_b.len() <= mesh.vertex_buffer.size() as usize {
             self.ctx.write_buffer(&mesh.vertex_buffer, vert_b);
         } else {
+            #[cfg(feature = "profiling")]
+            self.memory.set(self.memory.get() - mesh.vertex_buffer.size());
             mesh.vertex_buffer = self.ctx.buffer_init(
                 "tri", vert_b, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST
             );
+            #[cfg(feature = "profiling")]
+            self.memory.set(self.memory.get() + mesh.vertex_buffer.size());
         }
 
         if indi_b.len() <= mesh.index_buffer.size() as usize {
             self.ctx.write_buffer(&mesh.index_buffer, indi_b);
         } else {
+            #[cfg(feature = "profiling")]
+            self.memory.set(self.memory.get() - mesh.index_buffer.size());
             mesh.index_buffer = self.ctx.buffer_init(
                 "tri", indi_b, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST
             );
+            #[cfg(feature = "profiling")]
+            self.memory.set(self.memory.get() + mesh.index_buffer.size());
         }
 
         let transform = MeshUniform {
@@ -190,12 +202,14 @@ impl ChunkList {
             wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST
         );
 
+        #[cfg(feature = "profiling")]
+        self.memory.set(self.memory.get() + index_buffer.size() + vertex_buffer.size() + info_buffer.size());
+
         let info_bind_group = self.ctx.bind_group("mesh_info", &self.layout, &[
             info_buffer.as_entire_binding()
         ]);
 
         Mesh {
-            name: "".to_string(),
             vertex_buffer,
             index_buffer,
             num_elements: indi.len() as u32,
@@ -204,10 +218,17 @@ impl ChunkList {
             info_bind_group,
         }
     }
+
+    #[cfg(feature = "profiling")]
+    pub fn log_profile(&self) {
+        // Note: currently MB includes entities since they use the same chunk pool
+        //       planning to just use one mesh for all entities and move resizing to mesh struct.
+        println!("ChunkRender:\n  - loaded: {}\n  - pool: {}\n  - gpu MB: {}", self.chunks.len(), self.mesh_pool.len(), self.memory.get() / 1024 / 1024);
+    }
 }
 
 pub struct MeshBuilder {
-    atlas: Rc<TextureAtlas>,
+    pub atlas: Rc<TextureAtlas>,
     pub vert: Vec<ModelVertex>,
     pub indi: Vec<u32>,
 }

@@ -1,6 +1,3 @@
-## Fixing Transparency 
-
-- https://webgpu.github.io/webgpu-samples/samples/A-buffer (Copyright 2019 WebGPU Samples Contributors, BSD 3-Clause License)
 
 ## Infinite world
 

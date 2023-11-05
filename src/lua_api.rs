@@ -179,7 +179,13 @@ pub extern "C" fn render_entity(state: &mut State, id: i32, ty: i32, x: f32, y: 
                         builder.clear();
                         builder.add_cube(gen::tiles::stone, Vec3::new(0f32, 0f32, 0f32), true, true, true, true, true, true);
                         let builder = &state.chunks.builder;
-                        let mesh = state.chunks.init_mesh(&builder.vert, &builder.indi, transform);
+                        let mesh = match state.chunks.mesh_pool.pop() {
+                            None => state.chunks.init_mesh(&builder.vert, &builder.indi, transform),
+                            Some(mut mesh) => {
+                                state.chunks.reuse_mesh(&mut mesh, &builder.vert, &builder.indi, transform);
+                                mesh
+                            }
+                        };
                         *info = EntityInfo::SingleMesh(mesh);
                     }
                     EntityInfo::SingleMesh(mesh) => {

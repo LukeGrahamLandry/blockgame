@@ -10,6 +10,10 @@ ffi.cdef[[
 
     void set_y(Pos* pos, int y);
     int get_y(Pos* pos);
+
+    typedef struct Many {
+        int things[10];
+    } Many;
 ]]
 
 print(ffi.C.add(1, 2))

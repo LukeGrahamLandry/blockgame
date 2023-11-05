@@ -54,4 +54,9 @@ impl EntityRender {
             }
         }
     }
+
+    #[cfg(feature = "profiling")]
+    pub fn log_profile(&self) {
+        println!("EntityRender:\n  - loaded: {}", self.entities.len());
+    }
 }
