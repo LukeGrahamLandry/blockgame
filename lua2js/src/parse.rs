@@ -1,26 +1,42 @@
+use std::any::TypeId;
 use std::collections::HashMap;
-use full_moon::ast::{Ast, BinOp, Block, Call, Expression, Field, FunctionArgs, FunctionBody, FunctionCall, FunctionName, Index, LastStmt, Parameter, Prefix, Stmt, Suffix, UnOp, Value, Var};
+use full_moon::ast::{Ast, BinOp, Block, Call, Expression, Field, FunctionArgs, FunctionBody, FunctionCall, FunctionName, Index, LastStmt, Parameter, Prefix, Stmt, Suffix, UnOp, Value, Var, VarExpression};
+use full_moon::ast::types::{TypeInfo, TypeSpecifier};
+use full_moon::node::Node;
 use full_moon::tokenizer::{Token, TokenReference, TokenType};
 use seesea::ast::Module;
 use seesea::scanning::Scanner;
 use crate::ast::{Arg, LExpr, Literal, LStmt, LType, LVar, Op};
 
-struct State {
+pub struct Parser {
     ctypes: Module,
     next_var: usize,
     locals: Vec<HashMap<String, LVar>>,
-    var_names: HashMap<LVar, String>
+    var_names: HashMap<LVar, VarInfo>,
 }
 
-impl State {
+pub struct VarInfo {
+    pub name: String,
+    pub ty: LType
+}
+
+impl Parser {
     pub fn new() -> Self {
         let scanner = Scanner::new("", "ffi".parse().unwrap());
-        State {
+        Parser {
             ctypes: scanner.into(),
             next_var: 0,
             locals: vec![HashMap::new()],
             var_names: Default::default(),
         }
+    }
+
+    pub fn info(&self, var: LVar) -> &VarInfo {
+        self.var_names.get(&var).unwrap()
+    }
+
+    pub fn info_mut(&mut self, var: LVar) -> &mut VarInfo {
+        self.var_names.get_mut(&var).unwrap()
     }
 
     pub fn parse(&mut self, ast: &Ast) -> Vec<LStmt> {
@@ -29,11 +45,15 @@ impl State {
 
     fn parse_func_body(&mut self, func: &FunctionBody) -> LExpr {
         self.push_scope();
-        let args = func.parameters().iter().zip(func.type_specifiers()).map(|(p, t)| {
-            let ty = LType::Any;
+        let args: Vec<_> = func.parameters().iter().zip(func.type_specifiers()).map(|(p, t)| {
+            let ty = t.map(|t| self.parse_type(t.type_info())).unwrap_or(LType::Any);
             match p {
                 Parameter::Ellipse(_) => todo!(),
-                Parameter::Name(token) => Arg { name: self.new_var(token), ty },
+                Parameter::Name(token) => {
+                    let name = self.new_var(token);
+                    self.info_mut(name).ty = ty.clone();
+                    Arg { name, ty }
+                },
                 _ => unreachable!()
             }
         }).collect();
@@ -41,7 +61,41 @@ impl State {
         let body = self.parse_block(func.block()).boxed();
         self.pop_scope();
 
-        Op::FuncDef(args, body).of(LType::LFunction)
+        let ret = func.return_type().map(|t| self.parse_type(t.type_info())).unwrap_or(LType::Any);
+        let arg_t = args.iter().map(|arg| arg.ty.clone()).collect();
+
+        Op::FuncDef(args, body).of(LType::LFunction(Box::new(ret), arg_t))
+    }
+
+    fn parse_type(&mut self, ty: &TypeInfo) -> LType {
+        match ty {
+            TypeInfo::Array { .. } => todo!(),
+            TypeInfo::Basic(ty) => {
+                let s = ty.to_string();
+                if s == "string" {
+                    LType::String
+                } else if s == "number" {
+                    LType::F64
+                } else {
+                    LType::Any
+                }
+            },
+            TypeInfo::String(_) => LType::String,
+            TypeInfo::Boolean(_) => LType::Bool,
+            TypeInfo::Callback { .. } => todo!(),
+            TypeInfo::Generic { .. } => todo!(),
+            TypeInfo::GenericPack { .. } => todo!(),
+            TypeInfo::Intersection { .. } => todo!(),
+            TypeInfo::Module { .. } => todo!(),
+            TypeInfo::Optional { .. } => todo!(),
+            TypeInfo::Table { .. } => todo!(),
+            TypeInfo::Typeof { .. } => todo!(),
+            TypeInfo::Tuple { .. } => todo!(),
+            TypeInfo::Union { .. } => todo!(),
+            TypeInfo::Variadic { .. } => todo!(),
+            TypeInfo::VariadicPack { .. } => todo!(),
+            _ => unreachable!()
+        }
     }
 
     fn push_scope(&mut self) {
@@ -55,8 +109,9 @@ impl State {
     pub fn parse_stmt(&mut self, stmt: &Stmt) -> LStmt {
         match stmt {
             Stmt::Assignment(assign) => {
-                let vars = assign.variables().iter().map(|n| self.parse_var(n)).collect();
-                let vals = assign.expressions().iter().map(|n| self.parse_expr(n)).collect();
+                let vars: Vec<_> = assign.variables().iter().map(|n| self.parse_var(n)).collect();
+                let vals: Vec<_> = assign.expressions().iter().map(|n| self.parse_expr(n)).collect();
+
                 LStmt::Assign(vars, vals)
             }
             Stmt::Do(_) => todo!(),
@@ -64,7 +119,11 @@ impl State {
                 LStmt::Expr(self.parse_call(call))
             },
             Stmt::FunctionDeclaration(func) => {
-                LStmt::FuncDef(func.name().to_string(), self.parse_func_body(func.body()))
+                // TODO: this is wrong.
+                let var = self.new_var(func.name().tokens().next().unwrap());
+                let expr = self.parse_func_body(func.body());
+                self.info_mut(var).ty = expr.ty.clone();
+                LStmt::FuncDef(var, expr)
             },
             Stmt::GenericFor(block) => {
                 let vars = block.names().iter().map(|s| self.new_var(s)).collect();
@@ -77,12 +136,12 @@ impl State {
             },
             Stmt::If(iff) => {
                 let mut branches = vec![
-                    (self.parse_expr(iff.condition()), self.parse_block(iff.block()).boxed())
+                    (self.parse_expr(iff.condition()), self.parse_block(iff.block()))
                 ];
 
                 if let Some(chain) = iff.else_if() {
                     for choice in chain {
-                        branches.push((self.parse_expr(choice.condition()), self.parse_block(choice.block()).boxed()));
+                        branches.push((self.parse_expr(choice.condition()), self.parse_block(choice.block())));
                     }
                 }
 
@@ -90,8 +149,14 @@ impl State {
                 LStmt::If(branches, el)
             },
             Stmt::LocalAssignment(assign) => {
-                let vars = assign.names().iter().map(|n| self.new_var(n)).collect();
-                let vals = assign.expressions().iter().map(|n| self.parse_expr(n)).collect();
+                let vars: Vec<_> = assign.names().iter().map(|n| self.new_var(n)).collect();
+                let vals: Vec<_> = assign.expressions().iter().map(|n| self.parse_expr(n)).collect();
+                if vars.len() == vals.len() {
+                    for (var, val) in vars.iter().zip(vals.iter()) {
+                        let ty = &mut self.info_mut(*var).ty;
+                        *ty = val.ty.clone();
+                    }
+                }
                 LStmt::Local(vars, vals)
             },
             Stmt::LocalFunction(_) => todo!(),
@@ -114,13 +179,29 @@ impl State {
     }
 
     fn parse_call(&mut self, call: &FunctionCall) -> LExpr {
-        let func = match call.prefix() {
+        let mut expr = self.parse_prefix(call.prefix());
+        for suf in call.suffixes() {
+            expr = self.parse_suffix(expr, suf);
+        }
+
+        if let Op::Call(func, args) = &expr.op {
+            if let Op::Global(name) = &func.op {
+                if name == "type" {
+                    assert_eq!(args.len(), 1);
+                    expr = Op::TypeOf(args.first().unwrap().clone().boxed()).of(LType::String)
+                }
+            }
+        }
+
+        expr
+    }
+
+    fn parse_prefix(&mut self, pre: &Prefix) -> LExpr {
+        match pre {
             Prefix::Expression(e) => self.parse_expr(e),
             Prefix::Name(s) => self.parse_var(&Var::Name(s.clone())),
             _ => unreachable!()
-        };
-
-        todo!()
+        }
     }
 
     fn resolve_var_name(&self, name: &str) -> Option<LVar> {
@@ -135,10 +216,23 @@ impl State {
     /// Var can be a direct variable access or an expression accessing fields of a table.
     fn parse_var(&mut self, name: &Var) -> LExpr {
         match name {
-            Var::Expression(_) => todo!(),
+            Var::Expression(var) => {
+                let mut expr = self.parse_prefix(var.prefix());
+                for suf in var.suffixes() {
+                    expr = self.parse_suffix(expr, suf);
+                }
+                expr
+            }
             Var::Name(s) => {
-                let v = self.resolve_var_name(&s.to_string()).unwrap();
-                Op::Var(v).any()
+                let name = s.to_string().trim().to_string();
+                let v = self.resolve_var_name(&name);
+                match v {
+                    None => Op::Global(name).any(),
+                    Some(v) => {
+                        let info = self.info(v);
+                        Op::Var(v).of(info.ty.clone())
+                    },
+                }
             },
             _ => unreachable!()
         }
@@ -147,7 +241,12 @@ impl State {
     fn new_var(&mut self, name: &TokenReference) -> LVar {
         let v = LVar(self.next_var);
         self.next_var += 1;
-        self.locals.last_mut().unwrap().insert(name.to_string(), v);
+        let name = name.to_string().trim().to_string();
+        self.locals.last_mut().unwrap().insert(name.clone(), v);
+        self.var_names.insert(v, VarInfo {
+            name,
+            ty: LType::Any,
+        });
         v
     }
 
@@ -187,7 +286,7 @@ impl State {
                         }
                     }
                 }
-                
+
                 let fields = table.fields().iter().map(|field| {
                     match field {
                         Field::ExpressionKey { key, value, .. } => {
@@ -209,7 +308,13 @@ impl State {
                 Op::Literal(Literal::Num(val)).of(LType::F64)
             },
             Value::ParenthesesExpression(expr) => self.parse_expr(expr),
-            Value::String(val) => lit_str(val),
+            Value::String(val) => {
+                let mut s = val.to_string().trim().to_string();
+                assert!(s.len() > 2);
+                s.truncate(s.len() - 1);
+                s.remove(0);
+                lit_str(s)
+            },
             Value::Symbol(sym) => {
                 let sym = sym.token().to_string();
                 let sym = sym.trim();

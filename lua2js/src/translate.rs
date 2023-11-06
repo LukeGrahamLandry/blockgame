@@ -8,7 +8,9 @@ struct State {
     ctypes: Module
 }
 
-impl VisitorMut for State {
+pub struct NoComments();
+
+impl VisitorMut for NoComments {
     fn visit_multi_line_comment(&mut self, token: Token) -> Token {
         Token::new(TokenType::Whitespace { characters: Default::default() })
     }
@@ -24,7 +26,7 @@ pub fn tojs(ast: Ast) -> String {
     let mut state = State {
         ctypes: scanner.into()
     };
-    let ast = state.visit_ast(ast);
+    let ast = NoComments().visit_ast(ast);
     let mut out = "// This file is @generated from lua. Do not edit manually!\n".to_string();
     for node in ast.nodes().stmts() {
         out += &*stmt2js(node, &mut state);

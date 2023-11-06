@@ -1,6 +1,7 @@
 use full_moon::ast::{BinOp, UnOp};
 use seesea::ast::{CType, FuncSignature};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LType {
     Any,
     Nil,
@@ -8,12 +9,13 @@ pub enum LType {
     Bool,
     String,
     Table,
-    LFunction,
+    LFunction(Box<LType>, Vec<LType>),
     Union(Box<LType>, Box<LType>),
     CStruct(CType),
     CFunction(FuncSignature),
 }
 
+#[derive(Clone, Debug)]
 pub enum Op {
     Var(LVar),
     Binary(Box<LExpr>, BinOp, Box<LExpr>),
@@ -25,14 +27,18 @@ pub enum Op {
     TableInit(Vec<(LExpr, LExpr)>),
     Literal(Literal),
     FuncDef(Vec<Arg>, Box<LStmt>),
-    RestArgs
+    RestArgs,
+    Global(String),
+    TypeOf(Box<LExpr>)
 }
 
+#[derive(Clone, Debug)]
 pub struct LExpr {
-    op: Op,
-    ty: LType
+    pub op: Op,
+    pub ty: LType
 }
 
+#[derive(Clone, Debug)]
 pub enum Literal {
     Num(f64),
     Bool(bool),
@@ -40,13 +46,14 @@ pub enum Literal {
     Nil
 }
 
+#[derive(Clone, Debug)]
 pub enum LStmt {
     Local(Vec<LVar>, Vec<LExpr>),
     Block(Vec<LStmt>),
     Assign(Vec<LExpr>, Vec<LExpr>),
     Expr(LExpr),
-    If(Vec<(LExpr, Box<LStmt>)>, Option<Box<LStmt>>),
-    FuncDef(String, LExpr),
+    If(Vec<(LExpr, LStmt)>, Option<Box<LStmt>>),
+    FuncDef(LVar, LExpr),
     Return(Vec<LExpr>),
     NumFor {
         v: LVar,
@@ -61,9 +68,10 @@ pub enum LStmt {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct LVar(pub usize);
 
+#[derive(Clone, Debug)]
 pub struct Arg {
     pub name: LVar,
     pub ty: LType
@@ -92,5 +100,14 @@ impl LStmt {
     /// I like post-fix syntax better.
     pub fn boxed(self) -> Box<LStmt> {
         Box::new(self)
+    }
+}
+
+impl LType {
+    // Is it ok to say: self = new
+    // YES: local a: any = 10;
+    // NO: local b: any; local c: number = b;
+    pub fn can_assign(&self, new: &LType) -> bool {
+        self == &LType::Any || self == new
     }
 }

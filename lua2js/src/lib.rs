@@ -5,6 +5,7 @@ pub mod translate;
 pub mod strip_types;
 pub mod ast;
 mod parse;
+mod print_luau;
 
 pub fn to_ast(lua_src: &str) -> Result<Ast, Box<Error>> {
     Ok(parse(lua_src)?)
@@ -17,8 +18,22 @@ mod tests {
     use std::process::Command;
     use full_moon::print;
     use crate::strip_types::StripTypes;
-    use crate::translate::tojs;
+    use crate::translate::{NoComments, tojs};
     use full_moon::visitors::{VisitorMut};
+    use crate::parse::Parser;
+    use crate::print_luau::to_lua;
+
+    #[test]
+    fn print_infer() {
+        let src = fs::read_to_string("tests/type_checking.lua").unwrap();
+        let ast = full_moon::parse(&src).unwrap();
+        let ast = NoComments().visit_ast(ast);
+        let mut parse = Parser::new();
+        let stmts = parse.parse(&ast);
+        let out_src = to_lua(&parse, &stmts);
+        println!("{:?}", stmts);
+        println!("{}", out_src);
+    }
 
     fn compare(lua_src: &str, name: &str) {
         let ast = full_moon::parse(lua_src).unwrap();
